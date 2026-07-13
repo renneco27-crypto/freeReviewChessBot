@@ -421,7 +421,7 @@ function updateCoach(data) {
   void box.offsetWidth;
   box.classList.add('setting-mood');
   triggerFx(cls);
-  var html = pickMsg(cls, data.moveSan, data.currentEval, data.evalSwing, data.isWhiteToMove);
+  var html = data.customMsg || pickMsg(cls, data.moveSan, data.currentEval, data.evalSwing, data.isWhiteToMove);
   typewrite(html);
 }
 
@@ -470,6 +470,16 @@ function typewrite(html) {
       clearInterval(typeTimer);
       el.innerHTML = html;
       el.classList.remove('typing');
+      // If cursor is over a stockfish-preview that appeared after typing, trigger it
+      console.log('[SFPreview] typewrite done, checking mouse at', _lastMouseX, _lastMouseY);
+      if (_lastMouseX >= 0 && _lastMouseY >= 0) {
+        var under = document.elementFromPoint(_lastMouseX, _lastMouseY);
+        console.log('[SFPreview] elementUnderCursor after typewrite', under, under && under.className);
+        if (under && under.classList && under.classList.contains('stockfish-preview')) {
+          console.log('[SFPreview] Triggering preview from typewrite completion');
+          showSfPreview(under);
+        }
+      }
     }
   }, speed);
   talkTimer = setTimeout(function() { bot.classList.remove('talking'); }, plain.length * speed + 400);
@@ -501,7 +511,7 @@ function coachReset(text) {
 function coachProgress(text) {
   var el = document.getElementById('dialogueText');
   if (typeTimer) clearInterval(typeTimer);
-  el.textContent = text;
+  el.innerHTML = text;
   el.classList.remove('typing');
 }
 
@@ -509,6 +519,8 @@ function coachProgress(text) {
 // EVAL GRAPH
 // ═══════════════════════════════════════════════════════
 var graphMoves = [], graphHoverIdx = -1;
+var _previewActive = false, _savedPreviewNavIdx = -1;
+var _sfPreviewActive = false, _sfSavedNavIdx = -1;
 var GLYPH = {brilliant:'!!',great:'!',best:'\u2605',excellent:'\u2713',good:'\u2713',inaccuracy:'?!',mistake:'?',blunder:'!!',book:'\u25C7',forced:'\u25C1'};
 
 function drawGraph() {
@@ -618,6 +630,51 @@ function drawGraph() {
   ctx.stroke();
 }
 
+var _lastMouseX = -1, _lastMouseY = -1;
+var _lastSfEl = null;
+function showSfPreview(el) {
+  console.log('[SFPreview] showSfPreview called', el, el.dataset);
+  var uci = el.dataset.sfUci;
+  var fen = el.dataset.sfFen;
+  if (!uci || !fen) { console.log('[SFPreview] Missing uci or fen', { uci: uci, fen: fen }); return; }
+  _sfPreviewActive = true;
+  _lastSfEl = el;
+  _sfSavedNavIdx = navIdx;
+  console.log('[SFPreview] Creating Chess from fen', fen, 'uci', uci);
+  var tmpG = new Chess(fen);
+  var mr = tmpG.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci.length > 4 ? uci[4] : 'q' });
+  console.log('[SFPreview] move result', mr);
+  if (mr) cg.set({ fen: tmpG.fen() });
+}
+function hideSfPreview() {
+  console.log('[SFPreview] hideSfPreview called, _sfPreviewActive=' + _sfPreviewActive);
+  if (!_sfPreviewActive) return;
+  _sfPreviewActive = false;
+  _lastSfEl = null;
+  if (_sfSavedNavIdx >= 0 && _sfSavedNavIdx < moveHistory.length) {
+    var savedM = moveHistory[_sfSavedNavIdx];
+    console.log('[SFPreview] Restoring to savedNavIdx', _sfSavedNavIdx, 'fenAfter', savedM ? savedM.fenAfter : null);
+    if (savedM && savedM.fenAfter) cg.set({ fen: savedM.fenAfter });
+  } else {
+    console.log('[SFPreview] Falling back to updateBoard');
+    updateBoard();
+  }
+}
+document.addEventListener('pointermove', function(evt) {
+  _lastMouseX = evt.clientX; _lastMouseY = evt.clientY;
+  var el = document.elementFromPoint(evt.clientX, evt.clientY);
+  if (el && el.classList && el.classList.contains('stockfish-preview')) {
+    if (el !== _lastSfEl) {
+      console.log('[SFPreview] pointermove detected stockfish-preview', el.textContent, 'last was', _lastSfEl);
+      if (_lastSfEl) hideSfPreview();
+      _lastSfEl = el;
+      showSfPreview(el);
+    }
+  } else if (_lastSfEl) {
+    console.log('[SFPreview] pointermove left stockfish-preview');
+    hideSfPreview();
+  }
+});
 document.getElementById('evalCanvas').addEventListener('pointermove', function(evt) {
   if (!graphMoves.length) return;
   var rect = this.getBoundingClientRect(), x = evt.clientX - rect.left;
@@ -634,14 +691,94 @@ document.getElementById('evalCanvas').addEventListener('pointermove', function(e
     var tx = Math.max(4, Math.min(rect.width - tip.offsetWidth - 4, x - tip.offsetWidth / 2));
     tip.style.left = tx + 'px';
     tip.style.top = '-2px';
+
+    // Board preview on hover
+    if (!isAnalysing && currentMode !== 'review') {
+      if (!_previewActive) {
+        _previewActive = true;
+        _savedPreviewNavIdx = navIdx;
+      }
+      var hm = moveHistory[idx];
+      if (hm && hm.fenAfter) {
+        cg.set({ fen: hm.fenAfter });
+      }
+    }
   }
 });
 document.getElementById('evalCanvas').addEventListener('pointerleave', function() {
   graphHoverIdx = -1;
   drawGraph();
   document.getElementById('graphTooltip').style.display = 'none';
+  // Restore board from preview
+  if (_previewActive) {
+    _previewActive = false;
+    if (_savedPreviewNavIdx >= 0 && _savedPreviewNavIdx < moveHistory.length) {
+      var savedM = moveHistory[_savedPreviewNavIdx];
+      if (savedM && savedM.fenAfter) {
+        cg.set({ fen: savedM.fenAfter });
+      }
+    } else {
+      updateBoard();
+    }
+  }
+});
+document.getElementById('evalCanvas').addEventListener('click', function(evt) {
+  if (!graphMoves.length) return;
+  _lastMouseX = evt.clientX; _lastMouseY = evt.clientY;
+  var rect = this.getBoundingClientRect(), x = evt.clientX - rect.left;
+  var idx = Math.max(0, Math.min(graphMoves.length - 1, Math.round((x / rect.width) * (graphMoves.length - 1))));
+  var m = moveHistory[idx];
+  if (!m) return;
+
+  // During review playback, skip to next landmark
+  if (currentMode === 'review' && playbackTimer) {
+    clearTimeout(playbackTimer);
+    playbackTimer = null;
+    // Jump directly to the clicked move's position
+    var targetIdx = -1;
+    if (reviewData) {
+      for (var li = 0; li < reviewData.landmarks.length; li++) {
+        var lm = reviewData.landmarks[li];
+        var lmMoveNum = Math.floor((lm.moveNumber - 1) * 2 + (lm.color === 'Black' ? 1 : 0));
+        if (lmMoveNum >= idx) { targetIdx = li; break; }
+      }
+    }
+    if (targetIdx >= 0) {
+      goToMove(idx);
+      playbackCancelled = false;
+      advanceToLandmark(targetIdx);
+    } else {
+      goToMove(idx);
+      cancelReview();
+    }
+    return;
+  }
+
+  // Navigate board to clicked move
+  _previewActive = false;
+  goToMove(idx);
+
+  // Show coach explanation for the clicked move
+  var cls = m.classification || 'good';
+  var g = graphMoves[idx];
+  var swing = g ? Math.abs(g.eval - (idx > 0 ? graphMoves[idx - 1].eval : 0)) : 0;
+  var stockfishNote = '';
+  if (m.bestUci) {
+    var tmpG = new Chess(m.fenBefore);
+    var sfMr = tmpG.move({ from: m.bestUci.slice(0,2), to: m.bestUci.slice(2,4), promotion: m.bestUci.length > 4 ? m.bestUci[4] : 'q' });
+    var sfSan = sfMr ? sfMr.san : m.bestUci;
+    stockfishNote = ' Stockfish preferred <span class="stockfish-preview accent" data-sf-uci="' + m.bestUci + '" data-sf-fen="' + m.fenBefore + '">' + sfSan + '</span>.';
+  }
+  var mn = Math.floor(idx / 2) + 1;
+  var suffix = idx % 2 === 0 ? '.' : '...';
+  var moveLabel = mn + suffix + ' ' + m.san;
+  var msg = '<strong>' + moveLabel + '</strong> &mdash; <span style="color:' + (MOOD_COLORS[cls] || '#c9a24b') + '">' + cls.toUpperCase() + '</span>.' + stockfishNote;
+  msg += ' Eval: ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2);
+  if (swing > 0.15) msg += ' (swing ' + (swing > 0 ? '+' : '') + swing.toFixed(2) + ')';
+  updateCoach({ classification: cls, currentEval: m.evalAfter, evalSwing: swing, moveSan: m.san, isWhiteToMove: idx % 2 === 0, customMsg: msg });
 });
 new ResizeObserver(drawGraph).observe(document.getElementById('evalCanvas').parentElement);
+
 
 // ═══════════════════════════════════════════════════════
 // EVAL BAR
@@ -660,6 +797,12 @@ function updateEvalDisplay(cp) {
 // ═══════════════════════════════════════════════════════
 var moveHistory = [];
 
+function updateMoveHighlight() {
+  var chips = document.querySelectorAll('#moveList .move-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.toggle('active', i === navIdx && branchState.mode === 'mainline');
+  }
+}
 function renderHistory() {
   var list = document.getElementById('moveList');
   list.innerHTML = '';
@@ -777,6 +920,8 @@ function goToMove(idx) {
     updateEvalDisplay(0);
     cg.setShapes([]);
     updateNavDisplay();
+    renderHistory();
+    drawGraph();
     coachProgress('Start position');
     updateExplorer();
     return;
@@ -789,7 +934,9 @@ function goToMove(idx) {
     game.move(moveHistory[i].san);
   }
   updateBoard();
-  updateEvalDisplay(m.evalAfter * 100);
+  var displayCp = m.evalAfter * 100;
+  if (game.turn() === 'b') displayCp = -displayCp;
+  updateEvalDisplay(displayCp);
 
   var lastFrom = null, lastTo = null;
   if (idx >= 0) {
@@ -802,9 +949,14 @@ function goToMove(idx) {
 
   updateNavDisplay();
 
+  var cls = m.classification || 'good';
+  var color = MOOD_COLORS[cls] || '#c9a24b';
+  var meta = CLASS_META[cls] || CLASS_META.good;
   var mn = Math.floor(idx / 2) + 1;
   var suffix = idx % 2 === 0 ? '.' : '...';
-  coachProgress(mn + suffix + ' ' + m.san + ' &middot; ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2));
+  coachProgress(mn + suffix + ' ' + m.san + ' &middot; <span style="color:' + color + '">' + meta.label + '</span> &middot; ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2));
+  renderHistory();
+  drawGraph();
   updateExplorer();
 }
 
@@ -855,7 +1007,8 @@ function setEngineStatus(s) {
   dot.className = 'engine-dot';
   if (s === 'ready') { dot.classList.add('ready');
     lbl.textContent = 'Engine ready'; } else if (s === 'thinking') { dot.classList.add('thinking');
-    lbl.textContent = 'Analysing...'; } else { lbl.textContent = 'Connecting...'; }
+    lbl.textContent = 'Analysing...'; } else if (s === 'maia') { dot.classList.add('maia');
+    lbl.textContent = 'Maia thinking...'; } else { lbl.textContent = 'Connecting...'; }
 }
 
 function initEngine() {
@@ -1023,18 +1176,23 @@ function getThresh(c, prevCp) {
   return Infinity;
 }
 
-function classifyMove(topBefore, secondBefore, afterLine, playedUci) {
+function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore) {
   if (!topBefore || !afterLine) return 'good';
   var afterNeg = { cp: afterLine.cp !== null ? -afterLine.cp : null, mateIn: afterLine.mateIn !== null ? -afterLine.mateIn : null };
   var evBefore = toCp(topBefore), evAfter = toCp(afterNeg);
   var delta = Math.max(0, evBefore - evAfter), prevCp = topBefore.cp || 0;
   var onlyMove = secondBefore && (toCp(topBefore) - toCp(secondBefore)) >= 350;
+
   if (afterNeg.mateIn !== null) {
     if (afterNeg.mateIn < 0) return 'blunder';
     if (afterNeg.mateIn > 0) return 'brilliant';
   }
+
   if (playedUci === topBefore.move) return onlyMove ? 'great' : 'best';
   if (onlyMove) return 'blunder';
+
+  if (detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore)) return 'brilliant';
+
   var cats = ['best', 'excellent', 'good', 'inaccuracy', 'mistake'];
   for (var i = 0; i < cats.length; i++) {
     if (delta <= getThresh(cats[i], prevCp)) {
@@ -1043,6 +1201,22 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci) {
     }
   }
   return 'blunder';
+}
+
+function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore) {
+  if (!boardBefore) return false;
+  var BRILLIANT_GAIN_CP = 200;
+  var WINNING_THRESHOLD = 600;
+
+  var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
+  var piece = boardBefore.get(from);
+  if (!piece || piece.type === 'p') return false;
+  if (evBefore >= WINNING_THRESHOLD || evBefore <= -WINNING_THRESHOLD) return false;
+  var gain = evAfter - evBefore;
+  if (gain < BRILLIANT_GAIN_CP) return false;
+  var opponentColor = piece.color === 'w' ? 'b' : 'w';
+  if (!boardBefore.isSquareAttacked(to, opponentColor)) return false;
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1124,6 +1298,12 @@ function onMove(from, to) {
     return;
   }
 
+  // ── Play vs Coach mode ──
+  if (maiaMode) {
+    onMaiaUserMove(from, to);
+    return;
+  }
+
   var fenBefore = game.fen();
   var isWhiteTurn = game.turn() === 'w';
   var uci = from + to;
@@ -1159,12 +1339,13 @@ function onMove(from, to) {
     var evAfter = afterCpWhite / 100;
     var swing = Math.abs(evAfter - evBefore);
 
-    var cls = classifyMove(beforeLine, null, afterLine, uci);
+    var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
 
     updateEvalDisplay(afterCpWhite);
 
-    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: afterLine ? afterLine.move : null });
+    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
     graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
+    navIdx = moveHistory.length - 1;
     renderHistory();
     drawGraph();
 
@@ -1179,7 +1360,6 @@ function onMove(from, to) {
     prevEval = afterLine;
     isAnalysing = false;
 
-    navIdx = moveHistory.length - 1;
     updateNavDisplay();
     updateExplorer();
   }
@@ -1488,7 +1668,7 @@ function runGameReview() {
               uci: uci,
               from: m.move.from,
               to: m.move.to,
-              classification: classifyMove(prevEval, null, afterEval, uci),
+              classification: classifyMove(prevEval, null, afterEval, uci, new Chess(allPositions[j].fen)),
               evalBefore: toCp(prevEval),
               evalAfter: toCp(afterEval),
               evalSwing: Math.abs(toCp(prevEval) - toCp(afterEval)),
@@ -1564,9 +1744,26 @@ function finishReview(results, moves, rating) {
     }
   }
 
+  // Checkmate landmark: the final move of the game
+  var lastRes = results[results.length - 1];
+  if (lastRes) {
+    var finalGame = new Chess(lastRes.fenAfter);
+    if (finalGame.in_checkmate()) {
+      landmarks.push({
+        moveNumber: lastRes.moveNumber,
+        color: lastRes.color,
+        moveNotation: lastRes.san,
+        category: 'Checkmate',
+        evalSwing: lastRes.evalSwing / 100,
+        evalAfter: lastRes.evalAfter / 100,
+        commentary: lastRes.color === 'White' ? 'White delivers checkmate!' : 'Black delivers checkmate!'
+      });
+    }
+  }
+
   // Filter: only show landmark categories that matter (not every Best)
   var significantLandmarks = landmarks.filter(function(l) {
-    return l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || (l.category === 'Best' && l.evalSwing > 1.0);
+    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || (l.category === 'Best' && (l.evalSwing > 1.0 || Math.abs(l.evalAfter) >= 3.0));
   });
 
   // Fallback: if no significant landmarks, show the top 3 most impactful moments
@@ -1604,10 +1801,11 @@ function finishReview(results, moves, rating) {
   deletedBranches = [];
   var ub = document.getElementById('undoDeleteBtn');
   if (ub) ub.style.display = 'none';
-  results.forEach(function(r) {
+  results.forEach(function(r, idx) {
     var evPawns = r.evalAfter / 100;
-    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.afterLine ? r.afterLine.move : null });
-    graphMoves.push({ eval: evPawns, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
+    var whiteEval = idx % 2 === 0 ? -evPawns : evPawns;
+    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null });
+    graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
   renderHistory();
   drawGraph();
@@ -1644,11 +1842,14 @@ var reviewPhase = 'navigate'; // 'navigate' | 'takeaway'
 function startLandmarkPlayback() {
   if (!reviewData || reviewData.landmarks.length === 0) {
     coachReset('No significant landmarks found in this game.');
+    document.getElementById('landmarkNavRow').style.display = 'none';
     return;
   }
 
   playbackCancelled = false;
   reviewData.currentLandmark = -1;
+  document.getElementById('landmarkNavRow').style.display = '';
+  updateLandmarkCounter();
   game = new Chess();
   updateBoard();
   advanceToLandmark(0);
@@ -1656,6 +1857,7 @@ function startLandmarkPlayback() {
 
 function advanceToLandmark(idx) {
   if (playbackCancelled || idx >= reviewData.landmarks.length) {
+    document.getElementById('landmarkNavRow').style.display = 'none';
     reviewPhase = 'takeaway';
     showTakeaway();
     return;
@@ -1684,7 +1886,11 @@ function advanceToLandmark(idx) {
 
   // Fast-forward from current board state to target move
   var currentPly = game.history().length;
-  if (currentPly > targetMoveIdx) { advanceToLandmark(idx + 1); return; }
+  if (currentPly > targetMoveIdx) {
+    game = new Chess();
+    currentPly = 0;
+    updateBoard();
+  }
 
   function playNextPly() {
     if (playbackCancelled) return;
@@ -1700,6 +1906,7 @@ function advanceToLandmark(idx) {
     currentPly++;
     navIdx = currentPly - 1;
     updateNavDisplay();
+    updateMoveHighlight();
     var navM = moveHistory[navIdx];
     playbackTimer = setTimeout(playNextPly, 180);
   }
@@ -1709,6 +1916,8 @@ function advanceToLandmark(idx) {
 
 function showLandmark(landmark) {
   if (playbackCancelled) return;
+  renderHistory();
+  updateLandmarkCounter();
 
   var cat = landmark.category;
   var moodMap = { Book: 'book', Brilliant: 'brilliant', Great: 'great', Best: 'best', Blunder: 'blunder', Miss: 'inaccuracy' };
@@ -1750,15 +1959,43 @@ function showTakeaway() {
   speakText('Review complete. ' + reviewData.takeaway);
 }
 
+function jumpToLandmark(landmarkIdx) {
+  if (!reviewData) return;
+  if (playbackTimer) { clearTimeout(playbackTimer); playbackTimer = null; }
+  var landmark = reviewData.landmarks[landmarkIdx];
+  if (!landmark) return;
+  var targetMoveIdx = -1;
+  for (var i = 0; i < reviewData.allMoves.length; i++) {
+    var m = reviewData.allMoves[i];
+    var mn = Math.floor(i / 2) + 1;
+    var color = i % 2 === 0 ? 'White' : 'Black';
+    if (mn === landmark.moveNumber && color === landmark.color && m.san === landmark.moveNotation) { targetMoveIdx = i; break; }
+  }
+  if (targetMoveIdx < 0) return;
+  game = new Chess();
+  for (var j = 0; j <= targetMoveIdx; j++) { game.move(reviewData.allMoves[j]); }
+  updateBoard();
+  cg.set({ lastMove: [reviewData.allMoves[targetMoveIdx].from, reviewData.allMoves[targetMoveIdx].to], check: game.in_check() ? game.turn() : false });
+  navIdx = targetMoveIdx;
+  updateNavDisplay();
+  reviewData.currentLandmark = landmarkIdx;
+  showLandmark(landmark);
+}
+
 function updateLandmarkCounter() {
   if (!reviewData) return;
   var total = reviewData.landmarks.length;
-  var current = Math.min(reviewData.currentLandmark + 1, total);
+  var current = reviewData.currentLandmark;
+  var prevBtn = document.getElementById('prevLandmarkBtn');
+  var nextBtn = document.getElementById('nextLandmarkBtn');
+  prevBtn.disabled = current <= 0;
+  nextBtn.disabled = current >= total - 1;
 }
 
 function cancelReview() {
   if (playbackTimer) clearTimeout(playbackTimer);
   playbackCancelled = true;
+  document.getElementById('landmarkNavRow').style.display = 'none';
   currentMode = 'interactive';
   reviewPhase = 'navigate';
   branches = [];
@@ -1775,9 +2012,440 @@ function endReview() {
 }
 
 // ═══════════════════════════════════════════════════════
+// MAIA3 COACH ENGINE (Play vs Coach)
+// ═══════════════════════════════════════════════════════
+
+var maiaSession = null;
+var maiaReady = false;
+var maiaMode = false;
+var maiaHistory = [];
+var MAIA_HISTORY_LEN = 8;
+var MAIA_MOVE_VOCAB_SIZE = 4352;
+var maiaUciFromIdx = new Array(MAIA_MOVE_VOCAB_SIZE);
+var maiaUciToIdx = {};
+
+var MAIA_WHITE_TOK = {p:0,n:1,b:2,r:3,q:4,k:5};
+var MAIA_BLACK_TOK = {p:6,n:7,b:8,r:9,q:10,k:11};
+var MAIA_PROMO_PIECES = ['q','r','b','n'];
+
+function buildMaiaMoveVocab() {
+  var files = 'abcdefgh';
+  for (var i = 0; i < 4096; i++) {
+    var srcSq = i >> 6;
+    var dstSq = i & 63;
+    var uci = files[srcSq & 7] + ((srcSq >> 3) + 1) + files[dstSq & 7] + ((dstSq >> 3) + 1);
+    maiaUciFromIdx[i] = uci;
+    maiaUciToIdx[uci] = i;
+  }
+  for (var pi = 0; pi < 256; pi++) {
+    var idx = 4096 + pi;
+    var fromFile = pi >> 5;
+    var toFile = (pi >> 2) & 7;
+    var promoPiece = pi & 3;
+    var uci = files[fromFile] + '7' + files[toFile] + '8' + MAIA_PROMO_PIECES[promoPiece];
+    maiaUciFromIdx[idx] = uci;
+    maiaUciToIdx[uci] = idx;
+  }
+}
+
+function mirrorFen(fen) {
+  var parts = fen.split(' ');
+  var ranks = parts[0].split('/');
+  for (var r = 0; r < 8; r++) {
+    var row = ranks[r];
+    var newRow = '';
+    for (var c = 0; c < row.length; c++) {
+      var ch = row[c];
+      if (ch >= 'A' && ch <= 'Z') newRow += ch.toLowerCase();
+      else if (ch >= 'a' && ch <= 'z') newRow += ch.toUpperCase();
+      else newRow += ch;
+    }
+    ranks[r] = newRow;
+  }
+  ranks.reverse();
+  parts[0] = ranks.join('/');
+  parts[1] = parts[1] === 'w' ? 'b' : 'w';
+  if (parts[3] !== '-') {
+    var epRank = parts[3][1];
+    parts[3] = parts[3][0] + (epRank === '3' ? '6' : '3');
+  }
+  return parts.join(' ');
+}
+
+function tokenizeBoard(game) {
+  var isWhite = game.turn() === 'w';
+  var workGame = isWhite ? game : new Chess(mirrorFen(game.fen()));
+  var tokens = new Float32Array(64 * 12);
+  var board = workGame.board();
+  for (var row = 0; row < 8; row++) {
+    for (var file = 0; file < 8; file++) {
+      var sq = (7 - row) * 8 + file;
+      var piece = board[row][file];
+      if (piece) {
+        var tok = piece.color === 'w' ? MAIA_WHITE_TOK[piece.type] : MAIA_BLACK_TOK[piece.type];
+        tokens[sq * 12 + tok] = 1;
+      }
+    }
+  }
+  return tokens;
+}
+
+function buildMaiaInputTensor() {
+  var numPads = Math.max(0, MAIA_HISTORY_LEN - maiaHistory.length);
+  var width = 12 * MAIA_HISTORY_LEN + 1;
+  var tensor = new Float32Array(64 * width);
+  for (var h = 0; h < MAIA_HISTORY_LEN; h++) {
+    var histIdx = h < numPads ? 0 : h - numPads;
+    var src = maiaHistory[histIdx];
+    if (!src) continue;
+    for (var sq = 0; sq < 64; sq++) {
+      var dstOff = sq * width + h * 12;
+      var srcOff = sq * 12;
+      for (var t = 0; t < 12; t++) {
+        tensor[dstOff + t] = src[srcOff + t];
+      }
+    }
+  }
+  return tensor;
+}
+
+function mirrorSq(sq) {
+  return sq[0] + (9 - parseInt(sq[1]));
+}
+
+function mirrorUci(uci) {
+  if (uci.length === 4) return mirrorSq(uci.slice(0,2)) + mirrorSq(uci.slice(2,4));
+  return mirrorSq(uci.slice(0,2)) + mirrorSq(uci.slice(2,4)) + uci[4];
+}
+
+function eloToTemp(rating) {
+  var r = parseInt(rating, 10);
+  if (r <= 1000) return 3.0;
+  if (r <= 1200) return 2.0;
+  if (r <= 1400) return 1.5;
+  if (r <= 1600) return 1.2;
+  if (r <= 1800) return 1.0;
+  if (r <= 2000) return 0.8;
+  if (r <= 2200) return 0.6;
+  return 0.4;
+}
+
+function sampleFromLogits(maskedLogits, temperature) {
+  if (temperature <= 0) {
+    var maxIdx = 0, maxVal = maskedLogits[0];
+    for (var i = 1; i < maskedLogits.length; i++) {
+      if (maskedLogits[i] > maxVal) { maxVal = maskedLogits[i]; maxIdx = i; }
+    }
+    return maxIdx;
+  }
+  var maxL = -Infinity;
+  for (var i = 0; i < maskedLogits.length; i++) {
+    if (maskedLogits[i] > maxL) maxL = maskedLogits[i];
+  }
+  var sum = 0;
+  var vals = new Float64Array(maskedLogits.length);
+  for (var i = 0; i < maskedLogits.length; i++) {
+    vals[i] = Math.exp((maskedLogits[i] - maxL) / temperature);
+    sum += vals[i];
+  }
+  var r = Math.random() * sum;
+  for (var i = 0; i < vals.length; i++) {
+    r -= vals[i];
+    if (r <= 0) return i;
+  }
+  return vals.length - 1;
+}
+
+function tryParseUciMove(game, uci) {
+  try {
+    var from = uci.slice(0,2);
+    var to = uci.slice(2,4);
+    var promo = uci.length > 4 ? uci[4] : undefined;
+    var result = game.move({ from: from, to: to, promotion: promo || 'q' });
+    return result;
+  } catch(e) { return null; }
+}
+
+async function initMaiaSession() {
+  if (typeof ort === 'undefined') {
+    coachReset('onnxruntime not loaded yet — cannot start Maia engine.');
+    return;
+  }
+  try {
+    buildMaiaMoveVocab();
+    coachProgress('Loading Maia AI model...');
+    maiaSession = await ort.InferenceSession.create('maia3.onnx');
+    maiaReady = true;
+    coachProgress('Maia AI engine loaded!');
+  } catch (e) {
+    console.error('Maia init failed:', e);
+    coachReset('Maia AI failed to load: ' + e.message);
+    maiaReady = false;
+  }
+}
+
+async function getMaiaMove(chessGame, rating) {
+  if (!maiaReady || !maiaSession) return null;
+  var tokens = tokenizeBoard(chessGame);
+  maiaHistory.push(tokens);
+  if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
+  var inputTensor = buildMaiaInputTensor();
+  var elo = parseInt(rating, 10);
+  try {
+    var feeds = {
+      tokens: new ort.Tensor('float32', inputTensor, [1, 64, 97]),
+      self_elo: new ort.Tensor('int64', [BigInt(elo)], [1]),
+      oppo_elo: new ort.Tensor('int64', [BigInt(elo)], [1]),
+    };
+    var results = await maiaSession.run(feeds);
+    var logits = results.logits_move.data;
+    var isBlack = chessGame.turn() === 'b';
+    var legalMoves = chessGame.moves({ verbose: true });
+    var masked = new Float64Array(MAIA_MOVE_VOCAB_SIZE);
+    for (var i = 0; i < MAIA_MOVE_VOCAB_SIZE; i++) masked[i] = -1e30;
+    for (var m = 0; m < legalMoves.length; m++) {
+      var mv = legalMoves[m];
+      var uci = mv.from + mv.to;
+      if (mv.promotion) uci += mv.promotion;
+      var vocabUci = isBlack ? mirrorUci(uci) : uci;
+      var idx = maiaUciToIdx[vocabUci];
+      if (idx !== undefined) masked[idx] = logits[idx];
+    }
+    var temp = eloToTemp(rating);
+    var chosen = sampleFromLogits(masked, temp);
+    var predUci = maiaUciFromIdx[chosen];
+    if (isBlack) predUci = mirrorUci(predUci);
+    var topMoves = getMaiaTopMoves(masked, legalMoves, isBlack, temp, 3);
+    return { move: predUci, topMoves: topMoves };
+  } catch (e) {
+    console.error('Maia inference failed:', e);
+    return null;
+  }
+}
+
+function getMaiaTopMoves(maskedLogits, legalMoves, isBlack, temperature, count) {
+  var maxL = -Infinity;
+  for (var i = 0; i < maskedLogits.length; i++) {
+    if (maskedLogits[i] > maxL) maxL = maskedLogits[i];
+  }
+  var sum = 0;
+  var probs = [];
+  for (var i = 0; i < maskedLogits.length; i++) {
+    var p = Math.exp((maskedLogits[i] - maxL) / temperature);
+    sum += p;
+    probs.push(p);
+  }
+  var indexed = [];
+  for (var i = 0; i < probs.length; i++) {
+    if (maskedLogits[i] > -1e20) {
+      var uci = maiaUciFromIdx[i];
+      if (isBlack) uci = mirrorUci(uci);
+      indexed.push({ idx: i, uci: uci, prob: probs[i] / sum });
+    }
+  }
+  indexed.sort(function(a, b) { return b.prob - a.prob; });
+  var top = [];
+  var moveMap = {};
+  for (var i = 0; i < indexed.length && top.length < count; i++) {
+    var uci = indexed[i].uci;
+    if (!moveMap[uci]) {
+      moveMap[uci] = true;
+      top.push({ uci: uci, prob: indexed[i].prob });
+    }
+  }
+  return top;
+}
+
+function startMaiaGame() {
+  game = new Chess();
+  moveHistory = [];
+  graphMoves.length = 0;
+  prevEval = null;
+  maiaHistory = [];
+  navIdx = -1;
+  updateBoard();
+  updateEvalDisplay(0);
+  renderHistory();
+  drawGraph();
+  document.getElementById('explorerContent').parentElement.classList.add('explorer-hidden');
+  document.getElementById('navBar').style.display = 'none';
+  document.getElementById('pgnInput').value = '';
+  document.getElementById('fenInput').value = '';
+  document.getElementById('maiaDelayRow').style.display = '';
+  document.getElementById('explorerToggleBtn').style.display = '';
+  coachReset('Play vs Coach started. Make your move.');
+}
+
+function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isWhiteAfter) {
+  var beforeCp = beforeLine ? (beforeLine.cp || 0) : 0;
+  var afterCp = afterLine ? (afterLine.cp || 0) : 0;
+  var evBefore = (isWhiteAfter ? -beforeCp : beforeCp) / 100;
+  var evAfter = (isWhiteAfter ? -afterCp : afterCp) / 100;
+  var swing = Math.abs(evAfter - evBefore);
+  var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
+  moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+  var graphEval = isWhiteAfter ? -evAfter : evAfter;
+  graphMoves.push({ eval: graphEval, classification: cls, moveSan: san, ply: moveHistory.length });
+  return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
+}
+
+function evalPosition(fen, depth, cb) {
+  analysisPool.evaluate(fen, depth, function(lines) {
+    cb(parseLines(lines)[0] || null);
+  });
+}
+
+function onMaiaUserMove(from, to) {
+  var result = game.move({ from: from, to: to, promotion: 'q' });
+  if (!result) return;
+  var san = result.san, uci = from + to;
+  var fenAfter = game.fen();
+  updateBoard();
+  cg.set({ lastMove: [from, to], check: game.in_check() ? game.turn() : false });
+  if (game.game_over()) {
+    finishMaiaGame('Checkmate! You won!', san, uci, '');
+    return;
+  }
+  isAnalysing = true;
+  var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
+  var rating = document.getElementById('ratingSelect').value;
+  var fenBefore = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1].fenAfter : new Chess().fen();
+
+  function afterUserEval(afterLine) {
+    var isBlackTurn = game.turn() === 'b';
+    var rawCp = afterLine ? afterLine.cp || 0 : 0;
+    if (!prevEval) {
+      evalPosition(fenBefore, depth, function(beforeLine) {
+        var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isBlackTurn);
+        updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+        renderHistory();
+        drawGraph();
+        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
+        prevEval = afterLine;
+        doMaiaResponse(depth, rating);
+      });
+    } else {
+      var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
+      updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+      renderHistory();
+      drawGraph();
+      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
+      prevEval = afterLine;
+      doMaiaResponse(depth, rating);
+    }
+  }
+
+  evalPosition(fenAfter, depth, afterUserEval);
+}
+
+function doMaiaResponse(depth, rating) {
+  setEngineStatus('maia');
+  coachProgress('Maia is thinking...');
+  getMaiaMove(game, rating).then(function(result) {
+    if (!result) {
+      isAnalysing = false;
+      setEngineStatus('ready');
+      coachReset('Maia could not find a move.');
+      return;
+    }
+    var predUci = result.move;
+    var topMoves = result.topMoves;
+    var delay = parseInt(document.getElementById('maiaDelaySlider').value, 10);
+    setTimeout(function() {
+      var fenBefore = game.fen();
+      var mr = tryParseUciMove(game, predUci);
+      if (!mr) {
+        isAnalysing = false;
+        setEngineStatus('ready');
+        coachReset('Maia returned an illegal move: ' + predUci);
+        return;
+      }
+      var maiaUci = mr.from + mr.to + (mr.promotion || '');
+      var fenAfter = game.fen();
+      maiaHistory.push(tokenizeBoard(game));
+      if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
+      updateBoard();
+      cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+      navIdx = moveHistory.length;
+      updateNavDisplay();
+
+      if (game.game_over()) {
+        finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
+        return;
+      }
+
+      // Evaluate Maia's move quality
+      evalPosition(fenAfter, depth, function(afterLine) {
+        var isBlackTurn = game.turn() === 'b';
+        var rawCp = afterLine ? afterLine.cp || 0 : 0;
+        var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
+        updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+        renderHistory();
+        drawGraph();
+
+        // Build dual feedback message
+        var stockfishMove = null;
+        if (prevEval && prevEval.move) {
+          var tmpGame = new Chess(fenBefore);
+          var sfMr = tmpGame.move({ from: prevEval.move.slice(0,2), to: prevEval.move.slice(2,4), promotion: 'q' });
+          stockfishMove = sfMr ? sfMr.san : prevEval.move;
+        }
+        var sfEval = prevEval ? ((prevEval.cp || 0) / 100).toFixed(2) : null;
+        var sfEvalStr = sfEval ? (sfEval > 0 ? '+' : '') + sfEval : '';
+        var maiaTopHtml = '';
+        for (var t = 0; t < topMoves.length; t++) {
+          var tmpGame2 = new Chess(fenBefore);
+          var tmMr = tmpGame2.move({ from: topMoves[t].uci.slice(0,2), to: topMoves[t].uci.slice(2,4), promotion: topMoves[t].uci.length > 4 ? topMoves[t].uci[4] : 'q' });
+          var tmSan = tmMr ? tmMr.san : topMoves[t].uci;
+          maiaTopHtml += '<span class="accent">' + tmSan + '</span> ' + (topMoves[t].prob * 100).toFixed(0) + '%' + (t < topMoves.length - 1 ? ' &middot; ' : '');
+        }
+        var msg = 'Maia played <span class="accent">' + mr.san + '</span>.';
+        if (prevEval && prevEval.move) {
+          if (prevEval.move === predUci) {
+            msg += ' That was also Stockfish\'s top choice (' + sfEvalStr + ').';
+          } else if (stockfishMove && sfEvalStr) {
+            msg += ' Stockfish preferred <span class="stockfish-preview accent" data-sf-uci="' + prevEval.move + '" data-sf-fen="' + fenBefore + '">' + stockfishMove + '</span> (' + sfEvalStr + ').';
+          }
+        }
+        msg += ' Maia was choosing among: ' + maiaTopHtml;
+
+        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg });
+        prevEval = afterLine;
+        isAnalysing = false;
+        setEngineStatus('ready');
+      });
+    }, delay);
+  });
+}
+
+function finishMaiaGame(msg, lastSan, lastUci, lastFen) {
+  isAnalysing = false;
+  setEngineStatus('ready');
+  var pgn = game.pgn();
+  document.getElementById('pgnInput').value = pgn;
+  coachReset(msg + ' Your game PGN is ready above. Click <strong>Review Game</strong> to analyze it.');
+  stopMaiaMode();
+}
+
+function stopMaiaMode() {
+  maiaMode = false;
+  maiaHistory = [];
+  document.getElementById('coachPlayBtn').classList.remove('active-coach');
+  document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
+  document.getElementById('maiaDelayRow').style.display = 'none';
+  document.getElementById('explorerToggleBtn').style.display = 'none';
+  if (moveHistory.length > 0 && !document.getElementById('pgnInput').value.trim()) {
+    var t = new Chess();
+    moveHistory.forEach(function(m) { t.move(m.san); });
+    document.getElementById('pgnInput').value = t.pgn();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // CONTROLS
 // ═══════════════════════════════════════════════════════
 document.getElementById('positionBtn').addEventListener('click', function() {
+  if (maiaMode) stopMaiaMode();
   cancelReview();
   var fen = document.getElementById('fenInput').value.trim();
   if (!fen) return;
@@ -1831,12 +2499,22 @@ document.getElementById('positionBtn').addEventListener('click', function() {
 });
 
 document.getElementById('reviewBtn').addEventListener('click', function() {
+  if (maiaMode) stopMaiaMode();
   if (isAnalysing) { coachReset('Already analysing. Please wait.'); return; }
   if (!engineReady) { coachReset('Engine still loading. Please wait.'); return; }
+  var pgnInput = document.getElementById('pgnInput');
+  if (!pgnInput.value.trim() && moveHistory.length > 0) {
+    var t = new Chess();
+    for (var mi = 0; mi < moveHistory.length; mi++) {
+      try { t.move(moveHistory[mi].san); } catch(e) {}
+    }
+    pgnInput.value = t.pgn();
+  }
   runGameReview();
 });
 
 document.getElementById('clearBtn').addEventListener('click', function() {
+  if (maiaMode) stopMaiaMode();
   cancelReview();
   document.getElementById('pgnInput').value = '';
   game = new Chess();
@@ -1855,11 +2533,47 @@ document.getElementById('clearBtn').addEventListener('click', function() {
 });
 
 document.getElementById('prevMoveBtn').addEventListener('click', function() {
-  if (navIdx > -1) goToMove(navIdx - 1);
+  if (navIdx > -1) { goToMove(navIdx - 1); }
 });
 
 document.getElementById('nextMoveBtn').addEventListener('click', function() {
-  if (navIdx < moveHistory.length - 1) goToMove(navIdx + 1);
+  if (navIdx < moveHistory.length - 1) { goToMove(navIdx + 1); }
+});
+document.getElementById('nextLandmarkBtn').addEventListener('click', function() {
+  if (!reviewData) return;
+  if (playbackTimer) clearTimeout(playbackTimer);
+  playbackTimer = null;
+  playbackCancelled = false;
+  advanceToLandmark(reviewData.currentLandmark + 1);
+});
+document.getElementById('prevLandmarkBtn').addEventListener('click', function() {
+  if (!reviewData) return;
+  if (playbackTimer) clearTimeout(playbackTimer);
+  playbackTimer = null;
+  playbackCancelled = false;
+  var currentPly = game.history().length;
+  var bestIdx = -1, bestMoveIdx = -1;
+  for (var li = 0; li < reviewData.landmarks.length; li++) {
+    var lm = reviewData.landmarks[li];
+    var lmMoveIdx = -1;
+    for (var mi = 0; mi < reviewData.allMoves.length; mi++) {
+      var m = reviewData.allMoves[mi];
+      var mn = Math.floor(mi / 2) + 1;
+      var color = mi % 2 === 0 ? 'White' : 'Black';
+      if (mn === lm.moveNumber && color === lm.color && m.san === lm.moveNotation) { lmMoveIdx = mi; break; }
+    }
+    if (lmMoveIdx >= 0 && lmMoveIdx < currentPly && lmMoveIdx > bestMoveIdx) { bestMoveIdx = lmMoveIdx; bestIdx = li; }
+  }
+  if (bestIdx < 0) return;
+  jumpToLandmark(bestIdx);
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowLeft') {
+    document.getElementById('prevMoveBtn').click();
+  } else if (e.key === 'ArrowRight') {
+    document.getElementById('nextMoveBtn').click();
+  }
 });
 
 // ── Undo Delete Branch ──
@@ -1870,6 +2584,55 @@ document.getElementById('undoDeleteBtn').addEventListener('click', function() {
 // ── Flip Board ──
 document.getElementById('flipBtn').addEventListener('click', function() {
   cg.toggleOrientation();
+});
+
+// ── Explorer Toggle (Maia mode) ──
+document.getElementById('explorerToggleBtn').addEventListener('click', function() {
+  var parent = document.getElementById('explorerContent').parentElement;
+  parent.classList.toggle('explorer-hidden');
+  this.textContent = parent.classList.contains('explorer-hidden') ? '\u25B6' : '\u25BC';
+});
+
+// ── Play vs Coach (Maia AI) ──
+document.getElementById('coachPlayBtn').addEventListener('click', function() {
+  if (!maiaReady) {
+    if (typeof ort === 'undefined') {
+      coachReset('onnxruntime-web not loaded yet. Please wait or check the console.');
+      return;
+    }
+    initMaiaSession();
+    coachReset('Loading Maia AI model (first time). Please wait...');
+    return;
+  }
+  maiaMode = !maiaMode;
+  if (maiaMode) {
+    this.classList.add('active-coach');
+    startMaiaGame();
+    // If user is black, Maia plays as white first
+    if (game.turn() === 'b') {
+      isAnalysing = true;
+      setEngineStatus('maia');
+      coachProgress('Maia is thinking...');
+      var rating = document.getElementById('ratingSelect').value;
+      getMaiaMove(game, rating).then(function(result) {
+        if (!result) { isAnalysing = false; setEngineStatus('ready'); return; }
+        var delay = parseInt(document.getElementById('maiaDelaySlider').value, 10);
+        setTimeout(function() {
+          var mr = tryParseUciMove(game, result.move);
+          if (mr) {
+            updateBoard();
+            cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+            coachProgress('Maia played ' + mr.san + ' (White). Your turn.');
+          }
+          isAnalysing = false;
+          setEngineStatus('ready');
+        }, delay);
+      });
+    }
+  } else {
+    stopMaiaMode();
+    coachReset('Play vs Coach ended.');
+  }
 });
 
 // ── Suggest Best Move ──
@@ -1930,3 +2693,8 @@ if (!document.getElementById('apiToken').value) {
 initEngine();
 initBoard();
 coachReset('Ready when you are. Make a move or paste a PGN to review a game.');
+
+// Lazy-init Maia AI (give engine time to load first)
+setTimeout(function() {
+  if (typeof ort !== 'undefined') initMaiaSession();
+}, 1000);

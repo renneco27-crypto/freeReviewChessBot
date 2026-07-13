@@ -11,7 +11,7 @@
 <body>
 
 <header>
-  <h1>Chess Coach <span>Stockfish · NNUE · Voice</span></h1>
+  <h1>Chess Coach <span>Coach · Stockfish · NNUE</span></h1>
   <div class="engine-status">
     <div class="engine-dot" id="engineDot"></div>
     <span id="engineLabel">Loading engine…</span>
@@ -71,14 +71,27 @@
       </div>
       <button class="btn" id="flipBtn" title="Flip board">&#8635; Flip</button>
       <button class="btn" id="suggestBtn" title="Show best move in current position">&#9650; Best Move</button>
+      <button class="btn" id="coachPlayBtn" title="Play a game against Maia AI">&#9822; Play vs Coach</button>
       <button class="btn" id="ttsToggle" title="Toggle coach voice (browser built-in, no setup needed)">&#128263; Voice: OFF</button>
+      <div class="maia-delay-row" id="maiaDelayRow" style="display:none">
+        <span>Maia delay</span>
+        <input type="range" id="maiaDelaySlider" min="0" max="2000" value="750" step="50"
+               oninput="document.getElementById('maiaDelayVal').textContent=this.value+'ms'">
+        <span id="maiaDelayVal">750ms</span>
+      </div>
     </div>
 
     <!-- Navigation bar -->
     <div class="nav-bar" id="navBar" style="display:none">
-      <button class="btn" id="prevMoveBtn">&#8592;</button>
-      <span id="navMoveInfo"></span>
-      <button class="btn" id="nextMoveBtn">&#8594;</button>
+      <div class="nav-row">
+        <button class="btn" id="prevMoveBtn">&#8592;</button>
+        <span id="navMoveInfo"></span>
+        <button class="btn" id="nextMoveBtn">&#8594;</button>
+      </div>
+      <div class="nav-row nav-landmark-row" id="landmarkNavRow" style="display:none">
+        <button class="btn" id="prevLandmarkBtn">&#8592; Skip Back</button>
+        <button class="btn" id="nextLandmarkBtn">Skip Forward &#8594;</button>
+      </div>
     </div>
 
   </div>
@@ -138,7 +151,10 @@
 
     <!-- Opening Explorer -->
     <div class="explorer-panel">
-      <div class="panel-title">Opening Explorer</div>
+      <div class="panel-title">
+        <span>Opening Explorer</span>
+        <button class="btn-explorer-toggle" id="explorerToggleBtn" style="display:none" title="Show/hide explorer during Maia game">&#9776;</button>
+      </div>
       <div id="explorerContent">
         <div class="explorer-empty">Make a move to see opening statistics</div>
       </div>
@@ -157,6 +173,7 @@
     </div>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.min.js"></script>
 <script src="chess.js"></script>
 <script src="chessground.js"></script>
 <script src="app.js"></script>
