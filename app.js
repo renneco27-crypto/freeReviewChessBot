@@ -939,9 +939,13 @@ function goToMove(idx) {
 
   var m = moveHistory[idx];
   if (!m) return;
-  game = new Chess();
-  for (var i = 0; i <= idx; i++) {
-    game.move(moveHistory[i].san);
+  var currentPly = game.history().length;
+  var targetPly = idx + 1;
+  if (currentPly > targetPly) {
+    game = new Chess();
+    for (var i = 0; i <= idx; i++) game.move(moveHistory[i].san);
+  } else if (currentPly < targetPly) {
+    for (var i = currentPly; i <= idx; i++) game.move(moveHistory[i].san);
   }
   updateBoard();
   var displayCp = m.evalAfter * 100;
