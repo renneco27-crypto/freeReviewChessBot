@@ -366,9 +366,11 @@ header h1 span{color:var(--text-mute);font-weight:400;font-size:11px;margin-left
 .eval-vert{display:flex;flex-direction:column;align-items:center;width:32px;flex-shrink:0;padding:2px 0 8px}
 .eval-val{font-weight:700;font-size:11px;font-variant-numeric:tabular-nums;color:var(--text);margin-bottom:6px;white-space:nowrap}
 .eval-bar-wrap-v{flex:1;width:14px;background:#1a1a1a;border:1px solid #333;border-radius:4px;overflow:hidden;position:relative}
-.nav-landmark-col{display:flex;flex-direction:column;gap:2px;padding:8px 0 0}
-.nav-landmark-col .btn-sm{background:transparent;border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);cursor:pointer;font-size:9px;padding:2px 0;line-height:1;width:24px;transition:color .15s,border-color .15s}
-.nav-landmark-col .btn-sm:hover{color:var(--text);border-color:var(--gold)}
+.nav-landmark-col{display:flex;flex-direction:row;gap:6px;justify-content:center;padding:4px 0 0}
+.nav-landmark-col .btn{font-size:12px;padding:4px 14px;background:var(--surface2);border-color:var(--border);color:var(--text-dim);min-width:0}
+.nav-landmark-col .btn:hover:not([disabled]){color:var(--text);border-color:var(--gold);background:var(--surface3)}
+.nav-landmark-col .btn[disabled]{opacity:.3;cursor:default}
+.nav-landmark-col .btn[disabled]:hover{background:var(--surface2);border-color:var(--border)}
 .eval-bar-v{position:absolute;bottom:0;width:100%;background:#f0ede6;border-radius:0 0 4px 4px;transition:height .45s cubic-bezier(.4,0,.2,1);height:50%}
 
 /* Right column */
