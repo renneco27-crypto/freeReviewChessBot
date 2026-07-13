@@ -1876,6 +1876,9 @@ function finishReview(results, moves, rating) {
     moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null });
     graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
+  // Sync game to end of reviewed moves so graph clicks don't replay from scratch
+  game = new Chess();
+  moveHistory.forEach(function(m) { game.move(m.san); });
   renderHistory();
   drawGraph();
 
