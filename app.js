@@ -2635,7 +2635,7 @@ document.getElementById('prevLandmarkBtn').addEventListener('click', function() 
       var color = mi % 2 === 0 ? 'White' : 'Black';
       if (mn === lm.moveNumber && color === lm.color && m.san === lm.moveNotation) { lmMoveIdx = mi; break; }
     }
-    if (lmMoveIdx >= 0 && lmMoveIdx < currentPly && lmMoveIdx > bestMoveIdx) { bestMoveIdx = lmMoveIdx; bestIdx = li; }
+    if (lmMoveIdx >= 0 && lmMoveIdx < currentPly - 1 && lmMoveIdx > bestMoveIdx) { bestMoveIdx = lmMoveIdx; bestIdx = li; }
   }
   if (bestIdx < 0) return;
   jumpToLandmark(bestIdx);
