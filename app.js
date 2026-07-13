@@ -831,6 +831,16 @@ function renderHistory() {
         brChip.addEventListener('click', function(ev) {
           if (!isAnalysing) { ev.stopPropagation(); goToBranch(b.id); }
         });
+        // Promote button
+        var promBtn = document.createElement('span');
+        promBtn.className = 'branch-prom';
+        promBtn.textContent = '\u2B06';
+        promBtn.title = 'Promote to main line';
+        promBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          if (!isAnalysing) promoteBranch(b.id);
+        });
+        brChip.appendChild(promBtn);
         // X delete button on hover
         var delBtn = document.createElement('span');
         delBtn.className = 'branch-del';
@@ -1394,6 +1404,7 @@ function handleReviewMove(from, to) {
   if (!result) return;
   var san = result.san;
   var fenAfter = game.fen();
+  var uci = from + to;
 
   // Does it match the recorded game move at this ply?
   if (currentPly < moveHistory.length && san === moveHistory[currentPly].san) {
@@ -1437,17 +1448,26 @@ function handleReviewMove(from, to) {
   isAnalysing = true;
   setEngineStatus('thinking');
   var depth = parseInt(document.getElementById('depthSlider').value, 10);
-  analysisPool.evaluate(fenAfter, depth, function(lines) {
-    setEngineStatus('ready');
-    isAnalysing = false;
-    var parsed = parseLines(lines);
-    var top = parsed[0];
-    if (top) {
-      var cp = top.cp || 0;
-      updateEvalDisplay(cp);
-      var evStr = (cp > 0 ? '+' : '') + (cp / 100).toFixed(2);
-      coachProgress('Branch ' + label + ': ' + san + ' (' + evStr + ')');
-    }
+  analysisPool.evaluate(fenBefore, depth, function(beforeLines) {
+    var beforeParsed = parseLines(beforeLines);
+    var beforeTop = beforeParsed[0];
+    analysisPool.evaluate(fenAfter, depth, function(afterLines) {
+      setEngineStatus('ready');
+      isAnalysing = false;
+      var afterParsed = parseLines(afterLines);
+      var afterTop = afterParsed[0];
+      if (afterTop) {
+        var cp = afterTop.cp || 0;
+        updateEvalDisplay(cp);
+        var evStr = (cp > 0 ? '+' : '') + (cp / 100).toFixed(2);
+        var cls = classifyMove(beforeTop, null, afterTop, uci, new Chess(fenBefore));
+        var isBlackTurn = game.turn() === 'b';
+        var evAfter = (cp / 100);
+        var whiteRel = isBlackTurn ? -evAfter : evAfter;
+        coachProgress('Branch ' + label + ': ' + san + ' (' + evStr + ')');
+        updateCoach({ classification: cls, currentEval: whiteRel, evalSwing: 0, moveSan: san, isWhiteToMove: !isBlackTurn });
+      }
+    });
   });
 
   renderHistory();
@@ -1457,9 +1477,11 @@ function handleBranchMove(from, to) {
   var branch = branches.filter(function(b) { return b.id === branchState.activeBranchId; })[0];
   if (!branch) { branchState.mode = 'mainline'; branchState.activeBranchId = null; return; }
 
+  var fenBefore = game.fen();
   var result = game.move({ from: from, to: to, promotion: 'q' });
   if (!result) return;
   var san = result.san;
+  var uci = from + to;
   var fenAfter = game.fen();
 
   branch.moves.push(san);
@@ -1471,17 +1493,26 @@ function handleBranchMove(from, to) {
   isAnalysing = true;
   setEngineStatus('thinking');
   var depth = parseInt(document.getElementById('depthSlider').value, 10);
-  analysisPool.evaluate(fenAfter, depth, function(lines) {
-    setEngineStatus('ready');
-    isAnalysing = false;
-    var parsed = parseLines(lines);
-    var top = parsed[0];
-    if (top) {
-      var cp = top.cp || 0;
-      updateEvalDisplay(cp);
-      var evStr = (cp > 0 ? '+' : '') + (cp / 100).toFixed(2);
-      coachProgress('Branch ' + branch.label + ': ... ' + san + ' (' + evStr + ')');
-    }
+  analysisPool.evaluate(fenBefore, depth, function(beforeLines) {
+    var beforeParsed = parseLines(beforeLines);
+    var beforeTop = beforeParsed[0];
+    analysisPool.evaluate(fenAfter, depth, function(afterLines) {
+      setEngineStatus('ready');
+      isAnalysing = false;
+      var afterParsed = parseLines(afterLines);
+      var afterTop = afterParsed[0];
+      if (afterTop) {
+        var cp = afterTop.cp || 0;
+        updateEvalDisplay(cp);
+        var evStr = (cp > 0 ? '+' : '') + (cp / 100).toFixed(2);
+        var cls = classifyMove(beforeTop, null, afterTop, uci, new Chess(fenBefore));
+        var isBlackTurn = game.turn() === 'b';
+        var evAfter = (cp / 100);
+        var whiteRel = isBlackTurn ? -evAfter : evAfter;
+        coachProgress('Branch ' + branch.label + ': ... ' + san + ' (' + evStr + ')');
+        updateCoach({ classification: cls, currentEval: whiteRel, evalSwing: 0, moveSan: san, isWhiteToMove: !isBlackTurn });
+      }
+    });
   });
 
   renderHistory();
@@ -1506,6 +1537,39 @@ function deleteBranch(branchId) {
   }
   updateUndoBtn();
   renderHistory();
+}
+
+function promoteBranch(branchId) {
+  var branch = null;
+  for (var i = 0; i < branches.length; i++) {
+    if (branches[i].id === branchId) { branch = branches[i]; break; }
+  }
+  if (!branch) return;
+  var parentIdx = branch.parentMoveIndex;
+  var before = moveHistory.slice(0, parentIdx);
+  var promoted = branch.moves.map(function(san, j) {
+    return {
+      san: san,
+      fenBefore: j === 0 ? moveHistory[parentIdx].fenBefore : branch.fens[j - 1],
+      fenAfter: branch.fens[j],
+      classification: null,
+      evalBefore: 0,
+      evalAfter: 0,
+      bestUci: null
+    };
+  });
+  branches.splice(i, 1);
+  moveHistory = before.concat(promoted);
+  game = new Chess();
+  moveHistory.forEach(function(m) { game.move(m.san); });
+  navIdx = moveHistory.length - 1;
+  updateBoard();
+  updateExplorer();
+  branchState.mode = 'mainline';
+  branchState.activeBranchId = null;
+  updateUndoBtn();
+  renderHistory();
+  updateNavDisplay();
 }
 
 function deleteBranchesAt(parentMoveIndex) {

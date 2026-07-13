@@ -336,7 +336,7 @@ header h1 span{color:var(--text-mute);font-weight:400;font-size:11px;margin-left
 .btn.small{padding:5px 10px;font-size:11px;border-radius:var(--radius)}
 
 /* Layout */
-.main-wrap{width:100%;max-width:1100px;display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+.main-wrap{width:100%;max-width:1100px;display:grid;grid-template-columns:minmax(auto,540px) 1fr;gap:16px;align-items:start}
 
 /* Board */
 .board-col{display:flex;flex-direction:column;gap:8px;width:auto;min-width:0}
@@ -488,8 +488,11 @@ header h1 span{color:var(--text-mute);font-weight:400;font-size:11px;margin-left
 .branch-chip:hover{background:var(--border)}
 .branch-chip.active{border-color:var(--emerald);color:var(--text)}
 .branch-chip strong{color:var(--text)}
-.branch-del{margin-left:3px;opacity:0;font-size:8px;cursor:pointer;color:#e0483e;transition:opacity .15s}
-.branch-chip:hover .branch-del{opacity:1}
+.branch-del{margin-left:4px;padding:0 3px;opacity:0;font-size:14px;cursor:pointer;color:#e0483e;transition:opacity .15s}
+.branch-prom{margin-right:2px;padding:0 3px;opacity:0;font-size:13px;cursor:pointer;color:var(--emerald);transition:opacity .15s}
+.branch-chip:hover .branch-del,
+.branch-chip:hover .branch-prom{opacity:1}
+
 .branch-pop-btn{margin-left:2px;font-size:7px;cursor:pointer;opacity:.4;transition:opacity .15s;color:var(--text-dim)}
 .branch-pop-btn:hover{opacity:1}
 .branch-popover{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 0;z-index:100;min-width:110px;box-shadow:0 4px 12px rgba(0,0,0,.5)}
