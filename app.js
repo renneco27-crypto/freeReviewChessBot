@@ -2833,15 +2833,28 @@ function doSync() {
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(data) {
       if (!data.archives || data.archives.length === 0) throw new Error('No archives found');
-      var latest = data.archives[data.archives.length - 1];
-      document.getElementById('syncStatus').textContent = 'Fetching ' + latest.slice(-7) + '...';
-      return fetch(latest, { headers: { 'User-Agent': 'chess-coach-app/1.0' } });
-    })
-    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(data) {
-      var games = data.games || [];
-      _cachedGames = games;
-      renderSyncGames(games);
+      var allGames = [];
+      var idx = 0;
+      function fetchNext() {
+        if (idx >= data.archives.length) {
+          _cachedGames = allGames;
+          document.getElementById('syncStatus').textContent = allGames.length + ' total game' + (allGames.length !== 1 ? 's' : '');
+          renderSyncGames(allGames);
+          return;
+        }
+        var url = data.archives[idx];
+        document.getElementById('syncStatus').textContent = 'Fetching ' + url.slice(-7) + ' (' + (idx + 1) + '/' + data.archives.length + ')...';
+        fetch(url, { headers: { 'User-Agent': 'chess-coach-app/1.0' } })
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(d) {
+            var gs = d.games || [];
+            allGames = allGames.concat(gs);
+            idx++;
+            fetchNext();
+          })
+          .catch(function(err) { document.getElementById('syncStatus').textContent = 'Error: ' + err.message; });
+      }
+      fetchNext();
     })
     .catch(function(err) {
       document.getElementById('syncStatus').textContent = 'Error: ' + err.message;
