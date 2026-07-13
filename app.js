@@ -2758,51 +2758,74 @@ document.getElementById('pgnInput').addEventListener('keydown', function(e) {
 
 // ── Chess.com Sync ──
 var _cachedGames = [];
+var _syncPage = 0;
+var _syncPerPage = 6;
+
+function buildGameItem(g) {
+  var pgn = g.pgn;
+  var lines = pgn.split('\n');
+  var dateTag = '', whiteTag = '', blackTag = '', resultTag = '', ecoTag = '', openingTag = '';
+  lines.forEach(function(l) {
+    if (l.startsWith('[Date ')) dateTag = l.replace('[Date "', '').replace('"]', '').trim();
+    if (l.startsWith('[White ')) whiteTag = l.replace('[White "', '').replace('"]', '').trim();
+    if (l.startsWith('[Black ')) blackTag = l.replace('[Black "', '').replace('"]', '').trim();
+    if (l.startsWith('[Result ')) resultTag = l.replace('[Result "', '').replace('"]', '').trim();
+    if (l.startsWith('[ECO ')) ecoTag = l.replace('[ECO "', '').replace('"]', '').trim();
+    if (l.startsWith('[Opening ')) openingTag = l.replace('[Opening "', '').replace('"]', '').trim();
+  });
+  var timeClass = g.time_class || 'standard';
+  var isUserWhite = whiteTag.toLowerCase() === document.getElementById('chessUserInput').value.trim().toLowerCase();
+  var opp = isUserWhite ? blackTag : whiteTag;
+  var displayResult = resultTag;
+  var resultClass = '';
+  if (resultTag === '1-0') { displayResult = isUserWhite ? '1-0' : '0-1'; resultClass = isUserWhite ? 'win' : 'lose'; }
+  else if (resultTag === '0-1') { displayResult = isUserWhite ? '0-1' : '1-0'; resultClass = isUserWhite ? 'lose' : 'win'; }
+  else if (resultTag === '1/2-1/2') { displayResult = '\u00BD-\u00BD'; resultClass = 'draw'; }
+  var label = openingTag || (ecoTag ? ecoTag : '\u2022');
+  var item = document.createElement('div');
+  item.className = 'sync-game-item';
+  item.innerHTML = '<span class="g-opp">' + opp + '</span><span class="g-result ' + resultClass + '">' + displayResult + '</span><span class="g-meta">' + timeClass + ' ' + dateTag + '</span>';
+  item.title = label + ' vs ' + opp;
+  item.addEventListener('click', function() {
+    document.getElementById('pgnInput').value = pgn;
+    document.getElementById('reviewBtn').click();
+  });
+  return item;
+}
 
 function renderSyncGames(games) {
   var list = document.getElementById('syncGameList');
+  list.innerHTML = '';
   if (!games || games.length === 0) {
-    list.innerHTML = '<div class="sync-status" style="color:var(--text-mute);padding:8px 0;text-align:center">No games found</div>';
+    list.innerHTML = '<div style="color:var(--text-mute);padding:8px 0;text-align:center">No games found</div>';
     return;
   }
-  list.innerHTML = '';
-  games.forEach(function(g) {
-    var pgn = g.pgn;
-    var lines = pgn.split('\n');
-    var dateTag = '', whiteTag = '', blackTag = '', resultTag = '', ecoTag = '', openingTag = '';
-    lines.forEach(function(l) {
-      if (l.startsWith('[Date ')) dateTag = l.replace('[Date "', '').replace('"]', '').trim();
-      if (l.startsWith('[White ')) whiteTag = l.replace('[White "', '').replace('"]', '').trim();
-      if (l.startsWith('[Black ')) blackTag = l.replace('[Black "', '').replace('"]', '').trim();
-      if (l.startsWith('[Result ')) resultTag = l.replace('[Result "', '').replace('"]', '').trim();
-      if (l.startsWith('[ECO ')) ecoTag = l.replace('[ECO "', '').replace('"]', '').trim();
-      if (l.startsWith('[Opening ')) openingTag = l.replace('[Opening "', '').replace('"]', '').trim();
-    });
-    var timeClass = g.time_class || 'standard';
-    var isUserWhite = whiteTag.toLowerCase() === document.getElementById('chessUserInput').value.trim().toLowerCase();
-    var opp = isUserWhite ? blackTag : whiteTag;
-    var displayResult = resultTag;
-    var resultClass = '';
-    if (resultTag === '1-0') { displayResult = isUserWhite ? '1-0' : '0-1'; resultClass = isUserWhite ? 'win' : 'lose'; }
-    else if (resultTag === '0-1') { displayResult = isUserWhite ? '0-1' : '1-0'; resultClass = isUserWhite ? 'lose' : 'win'; }
-    else if (resultTag === '1/2-1/2') { displayResult = '\u00BD-\u00BD'; resultClass = 'draw'; }
-
-    var item = document.createElement('div');
-    item.className = 'sync-game-item';
-    var label = openingTag || (ecoTag ? ecoTag : '\u2022');
-    item.innerHTML = '<span class="g-opp">' + opp + '</span><span class="g-result ' + resultClass + '">' + displayResult + '</span><span class="g-meta">' + timeClass + ' ' + dateTag + '</span>';
-    item.title = label + ' vs ' + opp;
-    item.addEventListener('click', function() {
-      document.getElementById('pgnInput').value = pgn;
-      document.getElementById('reviewBtn').click();
-    });
-    list.appendChild(item);
+  var totalPages = Math.ceil(games.length / _syncPerPage);
+  if (_syncPage >= totalPages) _syncPage = totalPages - 1;
+  if (_syncPage < 0) _syncPage = 0;
+  var start = _syncPage * _syncPerPage;
+  var pageGames = games.slice(start, start + _syncPerPage);
+  pageGames.forEach(function(g) { list.appendChild(buildGameItem(g)); });
+  // Page nav
+  var nav = document.createElement('div');
+  nav.className = 'sync-pages';
+  nav.innerHTML = '<button class="btn-sm" ' + (_syncPage <= 0 ? 'disabled' : '') + ' id="syncPrevBtn">&#9664; Prev</button>' +
+    '<span class="sync-page-num">' + (_syncPage + 1) + '/' + totalPages + '</span>' +
+    '<button class="btn-sm" ' + (_syncPage >= totalPages - 1 ? 'disabled' : '') + ' id="syncNextBtn">Next &#9654;</button>';
+  list.appendChild(nav);
+  document.getElementById('syncPrevBtn').addEventListener('click', function() {
+    if (_syncPage > 0) { _syncPage--; renderSyncGames(games); }
   });
+  document.getElementById('syncNextBtn').addEventListener('click', function() {
+    if (_syncPage < totalPages - 1) { _syncPage++; renderSyncGames(games); }
+  });
+  document.getElementById('syncStatus').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '') + ' &middot; Page ' + (_syncPage + 1) + '/' + totalPages;
 }
 
 function doSync() {
   var username = document.getElementById('chessUserInput').value.trim();
   if (!username) { document.getElementById('syncStatus').textContent = 'Enter a username'; return; }
+  _syncPage = 0;
   document.getElementById('syncStatus').textContent = 'Fetching archives...';
   document.getElementById('syncGameList').innerHTML = '';
   var listUrl = 'https://api.chess.com/pub/player/' + encodeURIComponent(username) + '/games/archives';
@@ -2818,7 +2841,6 @@ function doSync() {
     .then(function(data) {
       var games = data.games || [];
       _cachedGames = games;
-      document.getElementById('syncStatus').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '') + ' loaded';
       renderSyncGames(games);
     })
     .catch(function(err) {
