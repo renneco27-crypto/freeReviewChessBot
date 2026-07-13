@@ -421,8 +421,32 @@ function updateCoach(data) {
   void box.offsetWidth;
   box.classList.add('setting-mood');
   triggerFx(cls);
+  window._lastPv = data.pvAfter || null;
+  window._lastFen = data.fenAfter || null;
+  var isBad = ['blunder','mistake','inaccuracy'].indexOf(cls) !== -1;
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) {
+    whyBtn.style.display = isBad && data.pvAfter ? 'inline-block' : 'none';
+    document.getElementById('refutationDisplay').innerHTML = '';
+  }
   var html = data.customMsg || pickMsg(cls, data.moveSan, data.currentEval, data.evalSwing, data.isWhiteToMove);
   typewrite(html);
+}
+
+function showRefutation() {
+  var pv = window._lastPv;
+  var fen = window._lastFen;
+  if (!pv || pv.length < 2 || !fen) return;
+  var g = new Chess(fen);
+  var html = '<span style="font-size:10px;color:var(--text-mute)">Refutation:</span> ';
+  for (var i = 0; i < Math.min(pv.length, 5); i++) {
+    var u = pv[i];
+    var mr = g.move({ from: u.slice(0,2), to: u.slice(2,4), promotion: u.length > 4 ? u[4] : 'q' });
+    if (!mr) break;
+    html += '<span class="ref-move' + (i % 2 === 0 ? ' opp' : '') + '">' + mr.san + '</span> ';
+  }
+  document.getElementById('refutationDisplay').innerHTML = html;
+  document.getElementById('whyMistakeBtn').style.display = 'none';
 }
 
 function triggerFx(cls) {
@@ -775,7 +799,7 @@ document.getElementById('evalCanvas').addEventListener('click', function(evt) {
   var msg = '<strong>' + moveLabel + '</strong> &mdash; <span style="color:' + (MOOD_COLORS[cls] || '#c9a24b') + '">' + cls.toUpperCase() + '</span>.' + stockfishNote;
   msg += ' Eval: ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2);
   if (swing > 0.15) msg += ' (swing ' + (swing > 0 ? '+' : '') + swing.toFixed(2) + ')';
-  updateCoach({ classification: cls, currentEval: m.evalAfter, evalSwing: swing, moveSan: m.san, isWhiteToMove: idx % 2 === 0, customMsg: msg });
+  updateCoach({ classification: cls, currentEval: m.evalAfter, evalSwing: swing, moveSan: m.san, isWhiteToMove: idx % 2 === 0, customMsg: msg, pvAfter: m.pvAfter || null, fenAfter: m.fenAfter || null });
 });
 new ResizeObserver(drawGraph).observe(document.getElementById('evalCanvas').parentElement);
 
@@ -1165,7 +1189,9 @@ function parseLines(lines) {
     if (!pvM) return;
     var pvId = pvIdM ? +pvM[1] : 1, dep = depM ? +depM[1] : 0;
     if (!byPV[pvId] || dep > byPV[pvId].dep) {
-      byPV[pvId] = { move: pvM[1], cp: cpM ? +cpM[1] : null, mateIn: mateM ? +mateM[1] : null, dep: dep };
+      var pvFull = l.match(/\bpv\s+(.+)/);
+      var pvArr = pvFull ? pvFull[1].trim().split(/\s+/) : [pvM[1]];
+      byPV[pvId] = { move: pvM[1], pv: pvArr.slice(0, 10), cp: cpM ? +cpM[1] : null, mateIn: mateM ? +mateM[1] : null, dep: dep };
     }
   });
   return Object.values(byPV);
@@ -1358,7 +1384,7 @@ function onMove(from, to) {
 
     updateEvalDisplay(afterCpWhite);
 
-    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null, pvBefore: beforeLine ? beforeLine.pv || null : null, pvAfter: afterLine ? afterLine.pv || null : null });
     graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
     navIdx = moveHistory.length - 1;
     renderHistory();
@@ -1369,7 +1395,9 @@ function onMove(from, to) {
       currentEval: evAfter,
       evalSwing: swing,
       moveSan: san,
-      isWhiteToMove: !isWhiteTurn
+      isWhiteToMove: !isWhiteTurn,
+      pvAfter: afterLine ? afterLine.pv || null : null,
+      fenAfter: fenAfter
     });
 
     prevEval = afterLine;
@@ -1873,7 +1901,7 @@ function finishReview(results, moves, rating) {
   results.forEach(function(r, idx) {
     var evPawns = r.evalAfter / 100;
     var whiteEval = idx % 2 === 0 ? -evPawns : evPawns;
-    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null });
+    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null, pvBefore: r.topBefore ? r.topBefore.pv || null : null, pvAfter: r.afterLine ? r.afterLine.pv || null : null });
     graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
   // Sync game to end of reviewed moves so graph clicks don't replay from scratch
@@ -2355,7 +2383,7 @@ function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine
   var evAfter = (isWhiteAfter ? -afterCp : afterCp) / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
-  moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+   moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
   var graphEval = isWhiteAfter ? -evAfter : evAfter;
   graphMoves.push({ eval: graphEval, classification: cls, moveSan: san, ply: moveHistory.length });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
