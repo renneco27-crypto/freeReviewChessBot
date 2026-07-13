@@ -532,5 +532,23 @@ header h1 span{color:var(--text-mute);font-weight:400;font-size:11px;margin-left
 .engine-status-big #engineLabel{font-size:14px;font-weight:600;color:var(--text)}
 .big-dot{width:14px;height:14px}
 
+/* Chess.com sync panel */
+.chess-sync-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;flex-shrink:0;box-shadow:var(--shadow-card)}
+.chess-sync-panel .panel-title{font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+.sync-row{display:flex;gap:6px}
+.sync-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;color:var(--text);outline:none;transition:border-color .2s}
+.sync-input:focus{border-color:var(--emerald)}
+.sync-input::placeholder{color:var(--text-mute)}
+.sync-status{font-size:11px;color:var(--text-dim);margin-top:4px;min-height:1.2em}
+.sync-game-list{max-height:190px;overflow-y:auto;margin-top:4px;display:flex;flex-direction:column;gap:2px}
+.sync-game-item{padding:5px 8px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);transition:background .1s;color:var(--text-dim);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.sync-game-item:hover{background:var(--border)}
+.sync-game-item .g-opp{color:var(--text);font-weight:500}
+.sync-game-item .g-result{font-weight:600}
+.sync-game-item .g-result.win{color:var(--emerald)}
+.sync-game-item .g-result.lose{color:var(--danger-hi)}
+.sync-game-item .g-result.draw{color:var(--gold)}
+.sync-game-item .g-meta{font-size:10px;color:var(--text-mute);white-space:nowrap}
+
 @media(max-width:820px){.main-wrap{grid-template-columns:1fr}.board-wrap{width:100%;height:auto;aspect-ratio:1}.right-col{max-height:none}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}

@@ -2750,6 +2750,95 @@ document.getElementById('pgnInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && e.ctrlKey) document.getElementById('reviewBtn').click();
 });
 
+// Restore saved chess.com username
+(function() {
+  var saved = localStorage.getItem('chessCoach.chessUser');
+  if (saved) document.getElementById('chessUserInput').value = saved;
+})();
+
+// ── Chess.com Sync ──
+var _cachedGames = [];
+
+function renderSyncGames(games) {
+  var list = document.getElementById('syncGameList');
+  if (!games || games.length === 0) {
+    list.innerHTML = '<div class="sync-status" style="color:var(--text-mute);padding:8px 0;text-align:center">No games found</div>';
+    return;
+  }
+  list.innerHTML = '';
+  games.forEach(function(g) {
+    var pgn = g.pgn;
+    var lines = pgn.split('\n');
+    var dateTag = '', whiteTag = '', blackTag = '', resultTag = '', ecoTag = '', openingTag = '';
+    lines.forEach(function(l) {
+      if (l.startsWith('[Date ')) dateTag = l.replace('[Date "', '').replace('"]', '').trim();
+      if (l.startsWith('[White ')) whiteTag = l.replace('[White "', '').replace('"]', '').trim();
+      if (l.startsWith('[Black ')) blackTag = l.replace('[Black "', '').replace('"]', '').trim();
+      if (l.startsWith('[Result ')) resultTag = l.replace('[Result "', '').replace('"]', '').trim();
+      if (l.startsWith('[ECO ')) ecoTag = l.replace('[ECO "', '').replace('"]', '').trim();
+      if (l.startsWith('[Opening ')) openingTag = l.replace('[Opening "', '').replace('"]', '').trim();
+    });
+    var timeClass = g.time_class || 'standard';
+    var isUserWhite = whiteTag.toLowerCase() === document.getElementById('chessUserInput').value.trim().toLowerCase();
+    var opp = isUserWhite ? blackTag : whiteTag;
+    var displayResult = resultTag;
+    var resultClass = '';
+    if (resultTag === '1-0') { displayResult = isUserWhite ? '1-0' : '0-1'; resultClass = isUserWhite ? 'win' : 'lose'; }
+    else if (resultTag === '0-1') { displayResult = isUserWhite ? '0-1' : '1-0'; resultClass = isUserWhite ? 'lose' : 'win'; }
+    else if (resultTag === '1/2-1/2') { displayResult = '\u00BD-\u00BD'; resultClass = 'draw'; }
+
+    var item = document.createElement('div');
+    item.className = 'sync-game-item';
+    var label = openingTag || (ecoTag ? ecoTag : '\u2022');
+    item.innerHTML = '<span class="g-opp">' + opp + '</span><span class="g-result ' + resultClass + '">' + displayResult + '</span><span class="g-meta">' + timeClass + ' ' + dateTag + '</span>';
+    item.title = label + ' vs ' + opp;
+    item.addEventListener('click', function() {
+      document.getElementById('pgnInput').value = pgn;
+      document.getElementById('reviewBtn').click();
+    });
+    list.appendChild(item);
+  });
+}
+
+function doSync() {
+  var username = document.getElementById('chessUserInput').value.trim();
+  if (!username) { document.getElementById('syncStatus').textContent = 'Enter a username'; return; }
+  document.getElementById('syncStatus').textContent = 'Fetching archives...';
+  document.getElementById('syncGameList').innerHTML = '';
+  var listUrl = 'https://api.chess.com/pub/player/' + encodeURIComponent(username) + '/games/archives';
+  fetch(listUrl, { headers: { 'User-Agent': 'chess-coach-app/1.0' } })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data) {
+      if (!data.archives || data.archives.length === 0) throw new Error('No archives found');
+      var latest = data.archives[data.archives.length - 1];
+      document.getElementById('syncStatus').textContent = 'Fetching ' + latest.slice(-7) + '...';
+      return fetch(latest, { headers: { 'User-Agent': 'chess-coach-app/1.0' } });
+    })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data) {
+      var games = data.games || [];
+      _cachedGames = games;
+      document.getElementById('syncStatus').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '') + ' loaded';
+      renderSyncGames(games);
+    })
+    .catch(function(err) {
+      document.getElementById('syncStatus').textContent = 'Error: ' + err.message;
+    });
+}
+
+document.getElementById('syncBtn').addEventListener('click', doSync);
+document.getElementById('chessUserInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSync();
+});
+
+// Patch the sync to save username
+var _origSync = doSync;
+doSync = function() {
+  var u = document.getElementById('chessUserInput').value.trim();
+  if (u) localStorage.setItem('chessCoach.chessUser', u);
+  _origSync();
+};
+
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
