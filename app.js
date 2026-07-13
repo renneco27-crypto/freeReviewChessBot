@@ -1226,6 +1226,7 @@ function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore) {
   if (gain < BRILLIANT_GAIN_CP) return false;
   var opponentColor = piece.color === 'w' ? 'b' : 'w';
   if (!boardBefore.isSquareAttacked(to, opponentColor)) return false;
+  if (boardBefore.isSquareAttacked(to, piece.color)) return false;
   return true;
 }
 
