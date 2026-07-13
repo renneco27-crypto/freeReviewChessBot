@@ -99,16 +99,6 @@
       <div class="engine-dot big-dot" id="engineDot"></div>
       <span id="engineLabel">Loading engine…</span>
     </div>
-    <!-- Chess.com sync -->
-    <div class="chess-sync-panel">
-      <div class="panel-title">Chess.com Sync</div>
-      <div class="sync-row">
-        <input class="sync-input" id="chessUserInput" placeholder="Username" spellcheck="false">
-        <button class="btn" id="syncBtn">&#8635; Sync</button>
-      </div>
-      <div class="sync-status" id="syncStatus"></div>
-      <div class="sync-game-list" id="syncGameList"></div>
-    </div>
     <!-- Coach -->
     <div class="coach-widget">
       <div class="coach-avatar-wrap">
@@ -160,15 +150,15 @@
       </div>
     </div>
 
-    <!-- Opening Explorer -->
-    <div class="explorer-panel">
-      <div class="panel-title">
-        <span>Opening Explorer</span>
-        <button class="btn-explorer-toggle" id="explorerToggleBtn" style="display:none" title="Show/hide explorer during Maia game">&#9776;</button>
+    <!-- Chess.com sync -->
+    <div class="chess-sync-panel">
+      <div class="panel-title">Chess.com Sync</div>
+      <div class="sync-row">
+        <input class="sync-input" id="chessUserInput" placeholder="Username" spellcheck="false">
+        <button class="btn" id="syncBtn">&#8635; Sync</button>
       </div>
-      <div id="explorerContent">
-        <div class="explorer-empty">Make a move to see opening statistics</div>
-      </div>
+      <div class="sync-status" id="syncStatus"></div>
+      <div class="sync-game-list" id="syncGameList"></div>
     </div>
 
     <!-- Move history -->
@@ -181,6 +171,16 @@
         </span>
       </div>
       <div class="move-list" id="moveList"></div>
+      <!-- Opening Explorer -->
+      <div class="explorer-panel" style="border:none;border-radius:0;box-shadow:none;padding:10px 0 0;margin-top:6px;border-top:1px solid var(--border)">
+        <div class="panel-title">
+          <span>Opening Explorer</span>
+          <button class="btn-explorer-toggle" id="explorerToggleBtn" style="display:none" title="Show/hide explorer during Maia game">&#9776;</button>
+        </div>
+        <div id="explorerContent">
+          <div class="explorer-empty">Make a move to see opening statistics</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
