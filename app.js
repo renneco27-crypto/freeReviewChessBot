@@ -2837,7 +2837,7 @@ function doSync() {
       var idx = 0;
       function fetchNext() {
         if (idx >= data.archives.length) {
-          _cachedGames = allGames;
+          _cachedGames = allGames.reverse();
           document.getElementById('syncStatus').textContent = allGames.length + ' total game' + (allGames.length !== 1 ? 's' : '');
           renderSyncGames(allGames);
           return;
