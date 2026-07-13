@@ -2619,6 +2619,7 @@ document.getElementById('nextLandmarkBtn').addEventListener('click', function() 
   advanceToLandmark(reviewData.currentLandmark + 1);
 });
 document.getElementById('prevLandmarkBtn').addEventListener('click', function() {
+  console.log('prevLandmarkBtn clicked', { reviewData: !!reviewData, playbackTimer: !!playbackTimer, currentPly: game.history().length, landmarks: reviewData ? reviewData.landmarks.length : null });
   if (!reviewData) return;
   if (playbackTimer) clearTimeout(playbackTimer);
   playbackTimer = null;
@@ -2819,7 +2820,6 @@ function renderSyncGames(games) {
   document.getElementById('syncNextBtn').addEventListener('click', function() {
     if (_syncPage < totalPages - 1) { _syncPage++; renderSyncGames(games); }
   });
-  document.getElementById('syncStatus').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '') + ' &middot; Page ' + (_syncPage + 1) + '/' + totalPages;
 }
 
 function doSync() {
