@@ -2360,6 +2360,14 @@ function evalPosition(fen, depth, cb) {
 }
 
 function onMaiaUserMove(from, to) {
+  // If navigated back, truncate history — new move becomes the latest
+  if (navIdx < moveHistory.length - 1) {
+    moveHistory = moveHistory.slice(0, navIdx + 1);
+    graphMoves = graphMoves.slice(0, navIdx + 1);
+    maiaHistory = [];
+    prevEval = null;
+    navIdx = -1;
+  }
   var result = game.move({ from: from, to: to, promotion: 'q' });
   if (!result) return;
   var san = result.san, uci = from + to;
