@@ -12,10 +12,6 @@
 
 <header>
   <h1>Chess Coach <span>Coach · Stockfish · NNUE</span></h1>
-  <div class="engine-status">
-    <div class="engine-dot" id="engineDot"></div>
-    <span id="engineLabel">Loading engine…</span>
-  </div>
   <div class="rating-select-wrap">
     <label for="ratingSelect">Rating</label>
     <select id="ratingSelect">
@@ -98,13 +94,18 @@
 
   <!-- Right column -->
   <div class="right-col">
+    <!-- Engine Status -->
+    <div class="engine-status-big">
+      <div class="engine-dot big-dot" id="engineDot"></div>
+      <span id="engineLabel">Loading engine…</span>
+    </div>
     <!-- Coach -->
     <div class="coach-widget">
       <div class="coach-avatar-wrap">
         <div class="coach-bot" id="coachBot" data-mood="good">
           <div class="bot-glow"></div>
           <svg class="bot-svg" viewBox="0 0 200 200">
-            <ellipse cx="100" cy="182" rx="48" ry="7" fill="rgba(10,8,6,.3)"/>
+            <ellipse cx="100" cy="182" rx="48" ry="7" fill="rgba(0,0,0,.5)"/>
             <g class="bot-body">
               <rect x="64" y="150" width="72" height="18" rx="4" class="bot-part bot-base"/>
               <path d="M72,150 L74,112 Q100,100 126,112 L128,150 Z" class="bot-part bot-torso"/>

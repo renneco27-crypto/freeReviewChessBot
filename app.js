@@ -437,7 +437,7 @@ function triggerFx(cls) {
       el.style.setProperty('--dy', (Math.sin(a) * d - 20) + 'px');
       el.style.left = (88 + Math.random() * 20 - 10) + 'px';
       el.style.top = (70 + Math.random() * 20 - 10) + 'px';
-      el.style.background = '#ffe08a';
+      el.style.background = '#fcd34d';
       layer.appendChild(el);
     }
   } else if (cls === 'blunder') {
@@ -543,7 +543,7 @@ function drawGraph() {
   function toY(ev) { var c = clamp(ev), m = 8 * 1.12, mid = areaY + areaH / 2; return mid - (c / m) * (areaH / 2); }
   function toX(i) { if (graphMoves.length <= 1) return w / 2; return (i / (graphMoves.length - 1)) * w; }
   if (!graphMoves.length) {
-    ctx.fillStyle = 'rgba(239,230,216,.35)';
+    ctx.fillStyle = 'rgba(255,255,255,.15)';
     ctx.font = '12px system-ui,sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -552,19 +552,19 @@ function drawGraph() {
   }
   var mid = areaY + areaH / 2;
   var gT = ctx.createLinearGradient(0, areaY, 0, mid);
-  gT.addColorStop(0, 'rgba(239,230,216,.08)');
-  gT.addColorStop(1, 'rgba(239,230,216,.02)');
+  gT.addColorStop(0, 'rgba(255,255,255,.06)');
+  gT.addColorStop(1, 'rgba(255,255,255,.02)');
   ctx.fillStyle = gT;
   ctx.fillRect(0, areaY, w, mid - areaY);
   var gB = ctx.createLinearGradient(0, mid, 0, areaY + areaH);
-  gB.addColorStop(0, 'rgba(20,16,12,.05)');
-  gB.addColorStop(1, 'rgba(20,16,12,.2)');
+  gB.addColorStop(0, 'rgba(0,0,0,.05)');
+  gB.addColorStop(1, 'rgba(0,0,0,.15)');
   ctx.fillStyle = gB;
   ctx.fillRect(0, mid, w, areaY + areaH - mid);
   ctx.beginPath();
   ctx.moveTo(0, mid);
   ctx.lineTo(w, mid);
-  ctx.strokeStyle = 'rgba(239,230,216,.4)';
+  ctx.strokeStyle = 'rgba(255,255,255,.15)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   ctx.stroke();
@@ -575,15 +575,15 @@ function drawGraph() {
   ctx.lineTo(0, mid);
   ctx.closePath();
   var gF = ctx.createLinearGradient(0, areaY, 0, areaY + areaH);
-  gF.addColorStop(0, 'rgba(201,162,75,.35)');
-  gF.addColorStop(.5, 'rgba(201,162,75,.04)');
-  gF.addColorStop(.5, 'rgba(76,143,224,.04)');
-  gF.addColorStop(1, 'rgba(76,143,224,.30)');
+  gF.addColorStop(0, 'rgba(252,211,77,.25)');
+  gF.addColorStop(.5, 'rgba(252,211,77,.03)');
+  gF.addColorStop(.5, 'rgba(76,143,224,.03)');
+  gF.addColorStop(1, 'rgba(76,143,224,.20)');
   ctx.fillStyle = gF;
   ctx.fill();
   ctx.beginPath();
   graphMoves.forEach(function(m, i) { i === 0 ? ctx.moveTo(toX(i), toY(m.eval)) : ctx.lineTo(toX(i), toY(m.eval)); });
-  ctx.strokeStyle = '#efe6d8';
+  ctx.strokeStyle = 'rgba(255,255,255,.5)';
   ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   ctx.stroke();
@@ -604,28 +604,28 @@ function drawGraph() {
     ctx.beginPath();
     ctx.moveTo(hx, areaY);
     ctx.lineTo(hx, barY);
-    ctx.strokeStyle = 'rgba(239,230,216,.45)';
+    ctx.strokeStyle = 'rgba(255,255,255,.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(hx, toY(graphMoves[graphHoverIdx].eval), 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffe08a';
+    ctx.fillStyle = '#fcd34d';
     ctx.fill();
-    ctx.strokeStyle = '#241813';
+    ctx.strokeStyle = '#1c1c2e';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
   var cw = w / graphMoves.length;
   graphMoves.forEach(function(m, i) {
     ctx.globalAlpha = (graphHoverIdx === i || graphHoverIdx === -1) ? 1 : .4;
-    ctx.fillStyle = MOOD_COLORS[m.classification] || '#555';
+    ctx.fillStyle = MOOD_COLORS[m.classification] || '#6b7280';
     ctx.fillRect(i * cw, barY, Math.max(1, cw - 1), barH);
   });
   ctx.globalAlpha = 1;
   ctx.beginPath();
   ctx.moveTo(0, barY);
   ctx.lineTo(w, barY);
-  ctx.strokeStyle = 'rgba(0,0,0,.35)';
+  ctx.strokeStyle = 'rgba(255,255,255,.1)';
   ctx.lineWidth = 1;
   ctx.stroke();
 }
@@ -685,8 +685,8 @@ document.getElementById('evalCanvas').addEventListener('pointermove', function(e
     var m = graphMoves[idx];
     if (!m) return;
     var tip = document.getElementById('graphTooltip');
-    var color = MOOD_COLORS[m.classification] || '#555';
-    tip.innerHTML = '<strong>' + m.ply + '. ' + m.moveSan + '</strong><span style="color:' + color + ';font-weight:700;margin:0 6px">' + GLYPH[m.classification] + ' ' + m.classification + '</span><span style="color:#cfc3ad">' + (m.eval > 0 ? '+' : '') + m.eval.toFixed(2) + '</span>';
+    var color = MOOD_COLORS[m.classification] || '#9ca3b8';
+    tip.innerHTML = '<strong>' + m.ply + '. ' + m.moveSan + '</strong><span style="color:' + color + ';font-weight:700;margin:0 6px">' + GLYPH[m.classification] + ' ' + m.classification + '</span><span style="color:#9ca3b8">' + (m.eval > 0 ? '+' : '') + m.eval.toFixed(2) + '</span>';
     tip.style.display = 'block';
     var tx = Math.max(4, Math.min(rect.width - tip.offsetWidth - 4, x - tip.offsetWidth / 2));
     tip.style.left = tx + 'px';
@@ -809,7 +809,7 @@ function renderHistory() {
   moveHistory.forEach(function(m, i) {
     var chip = document.createElement('span');
     chip.className = 'move-chip' + (i === navIdx && branchState.mode === 'mainline' ? ' active' : '');
-    var color = MOOD_COLORS[m.classification] || '#555';
+    var color = MOOD_COLORS[m.classification] || '#6b7280';
     var mn = Math.floor(i / 2) + 1, isW = i % 2 === 0;
     chip.innerHTML = '<span class="move-num">' + (isW ? mn + '.' : '') + '</span><span class="cls-dot" style="background:' + color + '"></span>' + m.san;
     chip.addEventListener('click', function() {
