@@ -387,7 +387,9 @@ var REVIEW_COMMENTARY = {
   Great: ['{move} is the only move that holds the position. Every alternative would lose. A great defensive find.'],
   Best: ['{move} is the top engine choice, maintaining maximum pressure. Precise play.'],
   Blunder: ['A costly blunder. {move} swings the evaluation sharply in the opponent\'s favour. This is the critical turning point.'],
-  Miss: ['Missed opportunity! The opponent slipped, but {move} fails to punish. {bestResponse} would have capitalized.']
+  Miss: ['Missed opportunity! The opponent slipped, but {move} fails to punish. {bestResponse} would have capitalized.'],
+  Mistake: ['{move} is a mistake. The evaluation shifts in the opponent\'s favour — a better alternative was available.'],
+  Inaccuracy: ['{move} is an inaccuracy. Not a blunder, but it gives the opponent a slight edge.']
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1482,10 +1484,11 @@ function initBoard() {
 }
 
 function updateBoard() {
+  var movableColor = (maiaMode) ? playerColor : 'both';
   cg.set({
     fen: game.fen(),
     turnColor: toColor(game.turn()),
-    movable: { color: 'both', dests: getLegalDests() },
+    movable: { color: movableColor, dests: getLegalDests() },
     lastMove: undefined,
     check: game.in_check() ? game.turn() : false
   });
@@ -2038,7 +2041,13 @@ function finishReview(results, moves, rating) {
       // AND it caused a significant swing (≥1.5 pawns) — not just consolidating an already-won position
       isLandmark = true;
       landmarkCategory = 'Best';
-    } else if (i > 0 && (res.classification === 'mistake' || res.classification === 'inaccuracy')) {
+    } else if (res.classification === 'mistake') {
+      isLandmark = true;
+      landmarkCategory = 'Mistake';
+    } else if (res.classification === 'inaccuracy') {
+      isLandmark = true;
+      landmarkCategory = 'Inaccuracy';
+    } else if (i > 0 && res.classification !== 'best' && res.classification !== 'excellent' && res.classification !== 'brilliant' && res.classification !== 'great') {
       // Check for "Miss": opponent made a suboptimal move, player failed to capitalize
       var prevRes = results[i - 1];
       var prevWasSuboptimal = (prevRes.classification === 'blunder' || prevRes.classification === 'mistake' || prevRes.classification === 'inaccuracy');
@@ -2090,7 +2099,7 @@ function finishReview(results, moves, rating) {
   // Filter: only show landmark categories that matter (not every Best)
   var significantLandmarks = landmarks.filter(function(l) {
     if (l.category === 'Best') return Math.abs(l.evalAfter) >= 3.0 && l.evalSwing >= 1.5;
-    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss';
+    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || l.category === 'Mistake' || l.category === 'Inaccuracy';
   });
 
   // Fallback: if no significant landmarks, show the top 3 most impactful (exclude Best under thresholds)
@@ -2371,6 +2380,7 @@ var maiaSession = null;
 var maiaReady = false;
 var maiaMode = false;
 var maiaHistory = [];
+var playerColor = 'white'; // 'white' | 'black' — which side the human plays in Maia mode
 var MAIA_HISTORY_LEN = 8;
 var MAIA_MOVE_VOCAB_SIZE = 4352;
 var maiaUciFromIdx = new Array(MAIA_MOVE_VOCAB_SIZE);
@@ -2608,15 +2618,21 @@ function getMaiaTopMoves(maskedLogits, legalMoves, isBlack, temperature, count) 
   return top;
 }
 
-function startMaiaGame() {
+function startMaiaGame(preserveGame) {
   currentMode = 'interactive';
-  game = new Chess();
-  moveHistory = [];
-  graphMoves.length = 0;
+  // Only reset game if not preserving a loaded FEN position
+  if (!preserveGame) {
+    game = new Chess();
+    moveHistory = [];
+    graphMoves.length = 0;
+  }
   prevEval = null;
   maiaHistory = [];
+  gameHistory = [game.fen()]; // Initialize game history for draw detection
   navIdx = -1;
-  updateBoard();
+  // Orient board and restrict movable pieces to the player's side
+  cg.set({ orientation: playerColor });
+  updateBoard(); // uses maiaMode + playerColor to restrict movable
   updateEvalDisplay(0);
   renderHistory();
   drawGraph();
@@ -2626,7 +2642,7 @@ function startMaiaGame() {
   document.getElementById('fenInput').value = '';
   document.getElementById('maiaDelayRow').style.display = '';
   document.getElementById('explorerToggleBtn').style.display = '';
-  coachReset('Play vs Coach started. Make your move.');
+  coachReset('Play vs Coach started. Make your move as ' + playerColor + '.');
 }
 
 function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isWhiteAfter) {
@@ -2664,8 +2680,17 @@ function onMaiaUserMove(from, to, promotion) {
   if (!result) return;
   var san = result.san, uci = from + to;
   var fenAfter = game.fen();
+  recordPosition(fenAfter);
   updateBoard();
   cg.set({ lastMove: [from, to], check: game.in_check() ? game.turn() : false });
+  
+  // Check for draw after user move
+  var drawCheck = checkDrawConditions(game);
+  if (drawCheck.isDraw) {
+    finishMaiaGame('Draw by ' + drawCheck.reason + '!', san, uci, '');
+    return;
+  }
+  
   if (game.game_over()) {
     finishMaiaGame('Checkmate! You won!', san, uci, '');
     return;
@@ -2727,15 +2752,24 @@ function doMaiaResponse(depth, rating) {
       var fenAfter = game.fen();
       maiaHistory.push(tokenizeBoard(game));
       if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
-      updateBoard();
-      cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
-      navIdx = moveHistory.length;
-      updateNavDisplay();
-
+      recordPosition(fenAfter);
+      
+      // Check for draw after Maia move
+      var drawCheck = checkDrawConditions(game);
+      if (drawCheck.isDraw) {
+        finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
+        return;
+      }
+      
       if (game.game_over()) {
         finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
         return;
       }
+
+      // Lock the board while evaluating (re-enables player's pieces after eval)
+      cg.set({ fen: game.fen(), turnColor: toColor(game.turn()), movable: { color: 'none', dests: new Map() }, lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+      navIdx = moveHistory.length;
+      updateNavDisplay();
 
       // Evaluate Maia's move quality
       evalPosition(fenAfter, depth, function(afterLine) {
@@ -2775,6 +2809,8 @@ function doMaiaResponse(depth, rating) {
         prevEval = afterLine;
         isAnalysing = false;
         setEngineStatus('ready');
+        // Re-enable player's pieces now that it's their turn
+        cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
       });
     }, delay);
   });
@@ -2792,10 +2828,14 @@ function finishMaiaGame(msg, lastSan, lastUci, lastFen) {
 function stopMaiaMode() {
   maiaMode = false;
   maiaHistory = [];
+  gameHistory = []; // Clear game history
+  playerColor = 'white';
   document.getElementById('coachPlayBtn').classList.remove('active-coach');
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
   document.getElementById('explorerToggleBtn').style.display = 'none';
+  // Restore full movability (both sides) and white-on-bottom orientation
+  cg.set({ orientation: 'white', movable: { color: 'both', dests: getLegalDests() } });
   if (moveHistory.length > 0 && !document.getElementById('pgnInput').value.trim()) {
     var t = new Chess();
     moveHistory.forEach(function(m) { t.move(m.san); });
@@ -2804,8 +2844,97 @@ function stopMaiaMode() {
 }
 
 // ═══════════════════════════════════════════════════════
-// CONTROLS
+// DRAW DETECTION & LOGIC
 // ═══════════════════════════════════════════════════════
+
+var gameHistory = []; // Track FEN positions for repetition detection
+
+function checkDrawConditions(chessGame) {
+  // 1. STALEMATE — not in check but no legal moves
+  if (!chessGame.in_check() && chessGame.moves().length === 0) {
+    return { isDraw: true, reason: 'Stalemate' };
+  }
+
+  // 2. INSUFFICIENT MATERIAL
+  if (isInsufficientMaterial(chessGame)) {
+    return { isDraw: true, reason: 'Insufficient Material' };
+  }
+
+  // 3. THREEFOLD REPETITION (5-fold is auto, so we check from 3)
+  var currentFen = chessGame.fen();
+  var fenCount = 1; // current position
+  for (var i = 0; i < gameHistory.length; i++) {
+    if (gameHistory[i] === currentFen) fenCount++;
+  }
+  if (fenCount >= 3) {
+    return { isDraw: true, reason: 'Threefold Repetition' };
+  }
+
+  // 4. FIFTY-MOVE RULE (75-move is auto in FIDE)
+  var halfMoves = chessGame.history({ verbose: true }).length;
+  if (chessGame.halfmoves >= 100) { // 50 full moves = 100 half-moves
+    return { isDraw: true, reason: '50-Move Rule' };
+  }
+  if (chessGame.halfmoves >= 150) { // 75 full moves = 150 half-moves (auto)
+    return { isDraw: true, reason: '75-Move Rule (Automatic)' };
+  }
+
+  return { isDraw: false };
+}
+
+function isInsufficientMaterial(chessGame) {
+  var board = chessGame.board();
+  var pieces = [];
+  for (var row = 0; row < 8; row++) {
+    for (var col = 0; col < 8; col++) {
+      var piece = board[row][col];
+      if (piece) pieces.push(piece);
+    }
+  }
+
+  // King vs King
+  if (pieces.length === 2 && pieces.every(function(p) { return p.type === 'k'; })) {
+    return true;
+  }
+
+  // King + minor (N or B) vs King
+  if (pieces.length === 3) {
+    var kings = pieces.filter(function(p) { return p.type === 'k'; });
+    var minors = pieces.filter(function(p) { return p.type === 'n' || p.type === 'b'; });
+    if (kings.length === 2 && minors.length === 1) return true;
+  }
+
+  // King + Bishop vs King + Bishop (same color only)
+  if (pieces.length === 4) {
+    var kings = pieces.filter(function(p) { return p.type === 'k'; });
+    var bishops = pieces.filter(function(p) { return p.type === 'b'; });
+    if (kings.length === 2 && bishops.length === 2) {
+      // Both bishops on same color squares? Check if they're both on light or both on dark
+      var b1Square = null, b2Square = null;
+      for (var row = 0; row < 8; row++) {
+        for (var col = 0; col < 8; col++) {
+          var piece = board[row][col];
+          if (piece && piece.type === 'b') {
+            var sqColor = (row + col) % 2;
+            if (b1Square === null) b1Square = sqColor;
+            else if (b2Square === null) b2Square = sqColor;
+          }
+        }
+      }
+      if (b1Square !== null && b2Square !== null && b1Square === b2Square) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function recordPosition(fen) {
+  if (gameHistory.length === 0 || gameHistory[gameHistory.length - 1] !== fen) {
+    gameHistory.push(fen);
+  }
+}
 document.getElementById('positionBtn').addEventListener('click', function() {
   if (maiaMode) stopMaiaMode();
   cancelReview();
@@ -2949,6 +3078,11 @@ document.getElementById('undoDeleteBtn').addEventListener('click', function() {
 // ── Flip Board ──
 document.getElementById('flipBtn').addEventListener('click', function() {
   cg.toggleOrientation();
+  // If in Maia mode, update playerColor to match the new orientation
+  if (maiaMode) {
+    playerColor = (cg.state.orientation === 'black') ? 'black' : 'white';
+    cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
+  }
 });
 
 // ── Explorer Toggle (Maia mode) ──
@@ -2972,25 +3106,57 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
   maiaMode = !maiaMode;
   if (maiaMode) {
     this.classList.add('active-coach');
-    startMaiaGame();
-    // If user is black, Maia plays as white first
-    if (game.turn() === 'b') {
+    // Determine player color from current board orientation (set by flip button)
+    playerColor = (cg.state.orientation === 'black') ? 'black' : 'white';
+    // If there's an existing game position (from FEN load), preserve it; otherwise start fresh
+    var hasExistingPosition = moveHistory.length > 0 || game.fen() !== new Chess().fen();
+    startMaiaGame(hasExistingPosition);
+    // If player is black, Maia (white) must go first
+    if (playerColor === 'black') {
       isAnalysing = true;
       setEngineStatus('maia');
-      coachProgress('Maia is thinking...');
+      coachProgress('Maia is thinking (White)...');
       var rating = document.getElementById('ratingSelect').value;
       getMaiaMove(game, rating).then(function(result) {
         if (!result) { isAnalysing = false; setEngineStatus('ready'); return; }
         var delay = parseInt(document.getElementById('maiaDelaySlider').value, 10);
         setTimeout(function() {
+          var fenBefore = game.fen();
           var mr = tryParseUciMove(game, result.move);
           if (mr) {
-            updateBoard();
-            cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
-            coachProgress('Maia played ' + mr.san + ' (White). Your turn.');
+            var maiaUci = mr.from + mr.to + (mr.promotion || '');
+            var fenAfter = game.fen();
+            recordPosition(fenAfter);
+            maiaHistory.push(tokenizeBoard(game));
+            if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
+            
+            // Check for draw after Maia's opening move
+            var drawCheck = checkDrawConditions(game);
+            if (drawCheck.isDraw) {
+              finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
+              return;
+            }
+            
+            // Evaluate Maia's opening move
+            var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
+            evalPosition(fenAfter, depth, function(afterLine) {
+              var isBlackTurn = game.turn() === 'b';
+              var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
+              updateEvalDisplay(r.evAfter * 100);
+              navIdx = moveHistory.length - 1;
+              renderHistory();
+              drawGraph();
+              prevEval = afterLine;
+              updateBoard();
+              cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+              coachProgress('Maia played <span class="accent">' + mr.san + '</span>. Your turn as Black.');
+              isAnalysing = false;
+              setEngineStatus('ready');
+            });
+          } else {
+            isAnalysing = false;
+            setEngineStatus('ready');
           }
-          isAnalysing = false;
-          setEngineStatus('ready');
         }, delay);
       });
     }
