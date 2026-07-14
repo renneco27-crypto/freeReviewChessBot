@@ -278,6 +278,9 @@ function _speakBrowser(plain) {
   utt.pitch = 1.0;
   utt.volume = 1.0;
   if (_synthVoice) utt.voice = _synthVoice;
+  utt.onend = function() {
+    if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
+  };
   _synth.speak(utt);
 }
 
@@ -292,7 +295,7 @@ function _speakEdgeTTS(plain) {
       var url = URL.createObjectURL(blob);
       ttsAudio = new Audio(url);
       ttsAudio.play();
-      ttsAudio.onended = function() { URL.revokeObjectURL(url); ttsAudio = null; };
+      ttsAudio.onended = function() { URL.revokeObjectURL(url); ttsAudio = null; if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); } };
     }).catch(function() { _speakBrowser(plain); });
 }
 
@@ -300,6 +303,16 @@ function speakText(text) {
   if (!ttsEnabled) return;
   var plain = text.replace(/<[^>]+>/g, '').trim();
   if (!plain) return;
+  if (EDGE_TTS_URL) { _speakEdgeTTS(plain); } else { _speakBrowser(plain); }
+}
+
+function speakTextWithCb(text, cb) {
+  var plain = text.replace(/<[^>]+>/g, '').trim();
+  if (!ttsEnabled || !plain) {
+    if (cb) setTimeout(cb, 50);
+    return;
+  }
+  _ttsCallback = cb;
   if (EDGE_TTS_URL) { _speakEdgeTTS(plain); } else { _speakBrowser(plain); }
 }
 
@@ -439,7 +452,7 @@ var REVIEW_COMMENTARY = {
 // ═══════════════════════════════════════════════════════
 // COACH BOT UI
 // ═══════════════════════════════════════════════════════
-var typeTimer = null, talkTimer = null, typewriteEndTime = 0;
+var typeTimer = null, talkTimer = null, typewriteEndTime = 0, _ttsCallback = null;
 
 function updateCoach(data) {
   var cls = (data.classification || 'good').toLowerCase().replace(/\s+/g, '');
@@ -2960,6 +2973,23 @@ function evalPosition(fen, depth, cb) {
   });
 }
 
+function scheduleMaiaResponse(depth, rating) {
+  var msgEl = document.getElementById('dialogueText');
+  var plain = msgEl ? msgEl.textContent || '' : '';
+  if (ttsEnabled && plain.trim()) {
+    _ttsCallback = function() { doMaiaResponse(depth, rating); };
+    // If TTS was already started by typewrite -> speakText, the onend handler
+    // will fire _ttsCallback. If no speech is in progress, fire fallback.
+    var delay = Math.max(3000, typewriteEndTime - Date.now());
+    setTimeout(function() {
+      if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
+    }, delay + 500);
+  } else {
+    var delay = Math.max(200, typewriteEndTime - Date.now());
+    setTimeout(function() { doMaiaResponse(depth, rating); }, delay);
+  }
+}
+
 function onMaiaUserMove(from, to, promotion) {
   promotion = promotion || 'q';
   // If navigated back in history, truncate history — new move becomes the latest
@@ -3006,9 +3036,8 @@ function onMaiaUserMove(from, to, promotion) {
         drawGraph();
         updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
         prevEval = afterLine;
-        // Wait for typewrite animation to finish before Maia responds
-        var _typeDelay = Math.max(3000, typewriteEndTime - Date.now());
-        setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
+        // Wait for TTS to finish before Maia responds (falls back to typewrite delay if no TTS)
+        scheduleMaiaResponse(depth, rating);
       });
     } else {
       var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
@@ -3017,9 +3046,8 @@ function onMaiaUserMove(from, to, promotion) {
       drawGraph();
       updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
       prevEval = afterLine;
-      // Wait for typewrite animation to finish before Maia responds
-      var _typeDelay = Math.max(3000, typewriteEndTime - Date.now());
-      setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
+      // Wait for TTS to finish before Maia responds (falls back to typewrite delay if no TTS)
+      scheduleMaiaResponse(depth, rating);
     }
   }
 
