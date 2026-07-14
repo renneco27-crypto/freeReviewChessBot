@@ -1484,7 +1484,11 @@ function initBoard() {
 }
 
 function updateBoard() {
-  var movableColor = (maiaMode) ? playerColor : 'both';
+  var movableColor = 'both';
+  if (maiaMode) {
+    var _turn = (game.turn() === 'w' ? 'white' : 'black');
+    movableColor = (_turn === playerColor) ? playerColor : 'none';
+  }
   cg.set({
     fen: game.fen(),
     turnColor: toColor(game.turn()),
@@ -2677,7 +2681,7 @@ function startMaiaGame(preserveGame) {
   document.getElementById('fenInput').value = '';
   document.getElementById('maiaDelayRow').style.display = '';
   document.getElementById('explorerToggleBtn').style.display = '';
-  coachReset('Play vs Coach started. Make your move as ' + playerColor + '.');
+  coachReset('Play vs Coach started. Color: ' + playerColor + '.');
 }
 
 function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isWhiteAfter) {
@@ -3146,10 +3150,11 @@ document.getElementById('undoDeleteBtn').addEventListener('click', function() {
 // ── Flip Board ──
 document.getElementById('flipBtn').addEventListener('click', function() {
   cg.toggleOrientation();
-  // If in Maia mode, update playerColor to match the new orientation
   if (maiaMode) {
     playerColor = (cg.state.orientation === 'black') ? 'black' : 'white';
-    cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
+    var _turn = (game.turn() === 'w' ? 'white' : 'black');
+    var ok = _turn === playerColor;
+    cg.set({ movable: { color: ok ? playerColor : 'none', dests: ok ? getLegalDests() : new Map() } });
   }
 });
 
@@ -3175,21 +3180,18 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
     maiaMode = true;
     _self.classList.add('active-coach');
 
-    // Player color = whoever has the current turn in the position.
-    // If it's white's turn → player is white; if black's turn → player is black.
-    // This handles: fresh game, loaded FEN, PGN, or mid-game board.
-    var currentTurn = game.turn(); // 'w' or 'b'
-    playerColor = (currentTurn === 'w') ? 'white' : 'black';
+    // Player plays the side at the bottom (board orientation).
+    // Orientation is set by the Flip button before clicking Play vs Coach.
+    playerColor = (cg.state.orientation === 'black') ? 'black' : 'white';
 
-    // Orient the board so the player sees their pieces at the bottom
     cg.set({ orientation: playerColor, coordinates: true });
 
     var hasExistingPosition = moveHistory.length > 0 || game.fen() !== new Chess().fen();
     startMaiaGame(hasExistingPosition);
 
-    // Maia plays the opposite color. Check if Maia needs to move first.
-    var maiaChessTurn = (playerColor === 'white') ? 'b' : 'w';
-    if (game.turn() === maiaChessTurn) {
+    // If it's NOT the player's turn, it's Maia's turn — she moves automatically
+    var playerChessTurn = (playerColor === 'white') ? 'w' : 'b';
+    if (game.turn() !== playerChessTurn) {
       var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
       var rating = document.getElementById('ratingSelect').value;
       doMaiaResponse(depth, rating);
