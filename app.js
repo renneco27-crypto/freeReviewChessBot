@@ -439,7 +439,7 @@ var REVIEW_COMMENTARY = {
 // ═══════════════════════════════════════════════════════
 // COACH BOT UI
 // ═══════════════════════════════════════════════════════
-var typeTimer = null, talkTimer = null;
+var typeTimer = null, talkTimer = null, typewriteEndTime = 0;
 
 function updateCoach(data) {
   var cls = (data.classification || 'good').toLowerCase().replace(/\s+/g, '');
@@ -476,7 +476,8 @@ function updateCoach(data) {
     document.getElementById('refutationDisplay').innerHTML = '';
   }
   var html;
-  if (maiaMode) {
+  // Only roast the player for their own moves in Maia mode (not Maia's moves, not review mode)
+  if (maiaMode && data.isUserMove && currentMode !== 'review') {
     var pool = ROAST_MSGS[cls] || ROAST_MSGS.good;
     html = pool[Math.floor(Math.random() * pool.length)];
     if (data.moveSan) {
@@ -685,6 +686,7 @@ function typewrite(html) {
   bot.classList.add('talking');
   el.classList.add('typing');
   var plain = html.replace(/<[^>]+>/g, ''), i = 0, speed = 16;
+  typewriteEndTime = Date.now() + plain.length * speed + 600;
   speakText(plain);
   typeTimer = setInterval(function() {
     i++;
@@ -1954,6 +1956,11 @@ function goToBranch(branchId) {
 // GAME REVIEW PIPELINE
 // ═══════════════════════════════════════════════════════
 function runGameReview() {
+  // Cancel any active playback/landmark timer from a previous review
+  if (playbackTimer) { clearTimeout(playbackTimer); playbackTimer = null; }
+  playbackCancelled = true;
+  document.getElementById('landmarkNavRow').style.display = 'none';
+
   var pgn = document.getElementById('pgnInput').value.trim();
   if (!pgn) {
     coachReset('Paste a PGN first, then click Review Game.');
@@ -2997,18 +3004,22 @@ function onMaiaUserMove(from, to, promotion) {
         updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
         renderHistory();
         drawGraph();
-        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
+        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
         prevEval = afterLine;
-        doMaiaResponse(depth, rating);
+        // Wait for typewrite animation to finish before Maia responds
+        var _typeDelay = Math.max(200, typewriteEndTime - Date.now());
+        setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
       });
     } else {
       var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
       updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
       renderHistory();
       drawGraph();
-      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
+      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
       prevEval = afterLine;
-      doMaiaResponse(depth, rating);
+      // Wait for typewrite animation to finish before Maia responds
+      var _typeDelay = Math.max(200, typewriteEndTime - Date.now());
+      setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
     }
   }
 
@@ -3094,7 +3105,7 @@ function doMaiaResponse(depth, rating) {
         }
         msg += ' Maia was choosing among: ' + maiaTopHtml;
 
-        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg });
+        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg, isUserMove: false });
         prevEval = afterLine;
         isAnalysing = false;
         setEngineStatus('ready');
