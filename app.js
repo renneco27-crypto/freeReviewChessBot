@@ -898,28 +898,11 @@ document.getElementById('evalCanvas').addEventListener('click', function(evt) {
   var m = moveHistory[idx];
   if (!m) return;
 
-  // During review playback, skip to next landmark
-  if (currentMode === 'review' && playbackTimer) {
+  // Stop any active playback but don't snap to landmark — go exactly where clicked
+  if (playbackTimer) {
     clearTimeout(playbackTimer);
     playbackTimer = null;
-    // Jump directly to the clicked move's position
-    var targetIdx = -1;
-    if (reviewData) {
-      for (var li = 0; li < reviewData.landmarks.length; li++) {
-        var lm = reviewData.landmarks[li];
-        var lmMoveNum = Math.floor((lm.moveNumber - 1) * 2 + (lm.color === 'Black' ? 1 : 0));
-        if (lmMoveNum >= idx) { targetIdx = li; break; }
-      }
-    }
-    if (targetIdx >= 0) {
-      goToMove(idx);
-      playbackCancelled = false;
-      advanceToLandmark(targetIdx);
-    } else {
-      goToMove(idx);
-      cancelReview();
-    }
-    return;
+    playbackCancelled = true;
   }
 
   // Navigate board to clicked move
@@ -1119,33 +1102,19 @@ function goToMove(idx) {
   } else if (currentPly < targetPly) {
     for (var i = currentPly; i <= idx; i++) game.move(moveHistory[i].san);
   }
+  updateBoard();
   var displayCp = m.evalAfter * 100;
   if (game.turn() === 'b') displayCp = -displayCp;
   updateEvalDisplay(displayCp);
 
-  // Compute the from/to squares for the target move
   var lastFrom = null, lastTo = null;
-  if (m.fenBefore) {
-    var tmpPrev = new Chess(m.fenBefore);
+  if (idx >= 0) {
+    var tmpPrev = new Chess();
+    for (var j = 0; j < idx; j++) { tmpPrev.move(moveHistory[j].san); }
     var moveObj = tmpPrev.move(m.san);
     if (moveObj) { lastFrom = moveObj.from; lastTo = moveObj.to; }
   }
-  if (!lastFrom && idx >= 0) {
-    var tmpPrev2 = new Chess();
-    for (var j = 0; j < idx; j++) { tmpPrev2.move(moveHistory[j].san); }
-    var moveObj2 = tmpPrev2.move(m.san);
-    if (moveObj2) { lastFrom = moveObj2.from; lastTo = moveObj2.to; }
-  }
-
-  // Single combined cg.set so chessground animates from current visual state to target FEN
-  cg.set({
-    fen: game.fen(),
-    turnColor: toColor(game.turn()),
-    movable: { color: 'both', dests: getLegalDests() },
-    lastMove: lastFrom && lastTo ? [lastFrom, lastTo] : [],
-    check: game.in_check() ? game.turn() : false
-  });
-  cg.setShapes([]);
+  cg.set({ lastMove: lastFrom && lastTo ? [lastFrom, lastTo] : [], check: game.in_check() ? game.turn() : false });
 
   updateNavDisplay();
 
@@ -1450,6 +1419,57 @@ function getLegalDests() {
 
 function toColor(turn) { return turn === 'w' ? 'white' : 'black'; }
 
+// ── Promotion picker ──
+function isPromotionMove(from, to) {
+  var piece = game.get(from);
+  if (!piece || piece.type !== 'p') return false;
+  var toRank = to[1];
+  return (piece.color === 'w' && toRank === '8') || (piece.color === 'b' && toRank === '1');
+}
+
+function showPromotionPicker(from, to, color, callback) {
+  var existing = document.getElementById('promotionPicker');
+  if (existing) existing.remove();
+
+  var boardWrap = document.getElementById('board').parentElement;
+  var boardSize = boardWrap.offsetWidth;
+  var sq = boardSize / 8;
+
+  var file = to.charCodeAt(0) - 97;           // 0-7
+  var rank = parseInt(to[1], 10);              // 1-8
+  var flipped = cg.state.orientation === 'black';
+
+  var leftPct = (flipped ? 7 - file : file) * 12.5;
+  var topPct = flipped ? (rank - 1) * 12.5 : (8 - rank) * 12.5;
+
+  // Show picker below the square if promoting to rank 8 (white) or rank 1 (black after flip)
+  var below = (!flipped && rank === 8) || (flipped && rank === 1);
+  var pickerTop = below ? topPct + 12.5 : Math.max(0, topPct - 6.25);
+
+  var picker = document.createElement('div');
+  picker.id = 'promotionPicker';
+  picker.style.cssText = 'position:absolute;z-index:100;left:' + leftPct + '%;top:' + pickerTop + '%;display:flex;gap:2px';
+
+  var sym = color === 'w' ? { q:'♕', r:'♖', b:'♗', n:'♘' } : { q:'♛', r:'♜', b:'♝', n:'♞' };
+
+  ['q','r','b','n'].forEach(function(p) {
+    var btn = document.createElement('button');
+    btn.innerHTML = sym[p];
+    btn.style.cssText = 'width:' + sq + 'px;height:' + sq + 'px;font-size:' + (sq * 0.55) + 'px;background:rgba(30,30,46,.92);border:2px solid #fcd34d;border-radius:4px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;transition:background .12s;padding:0';
+    btn.addEventListener('mouseenter', function() { this.style.background = 'rgba(70,70,95,.95)'; });
+    btn.addEventListener('mouseleave', function() { this.style.background = 'rgba(30,30,46,.92)'; });
+    btn.addEventListener('click', function(e) { e.stopPropagation(); picker.remove(); backdrop.remove(); callback(p); });
+    picker.appendChild(btn);
+  });
+
+  var backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;z-index:99;background:transparent';
+  backdrop.addEventListener('click', function() { backdrop.remove(); picker.remove(); updateBoard(); });
+
+  document.body.appendChild(backdrop);
+  boardWrap.appendChild(picker);
+}
+
 function initBoard() {
   var el = document.getElementById('board');
   cg = ChessgroundLib.Chessground(el, {
@@ -1491,6 +1511,26 @@ function updateNavDisplay() {
 function onMove(from, to) {
   if (isAnalysing) return;
 
+  // Check for pawn promotion before committing the move
+  if (isPromotionMove(from, to)) {
+    var color = game.turn();
+    var _maiaMode = maiaMode;
+    var _currentMode = currentMode;
+    var _branchMode = branchState.mode;
+    showPromotionPicker(from, to, color, function(piece) {
+      if (_currentMode === 'review') {
+        handleReviewMove(from, to, piece);
+      } else if (_branchMode === 'branch') {
+        handleBranchMove(from, to, piece);
+      } else if (_maiaMode) {
+        onMaiaUserMove(from, to, piece);
+      } else {
+        onMoveWithPromotion(from, to, piece);
+      }
+    });
+    return;
+  }
+
   if (currentMode === 'review') {
     handleReviewMove(from, to);
     return;
@@ -1503,24 +1543,27 @@ function onMove(from, to) {
 
   // ── Play vs Coach mode ──
   if (maiaMode) {
-    onMaiaUserMove(from, to);
+    onMaiaUserMove(from, to, 'q');
     return;
   }
 
+  onMoveWithPromotion(from, to, 'q');
+}
+
+function onMoveWithPromotion(from, to, promotion) {
   // If we navigated back and are now playing a new move, truncate the future
   var insertIdx = navIdx + 1; // where the new move goes
   if (insertIdx < moveHistory.length) {
     moveHistory.splice(insertIdx);
     graphMoves.splice(insertIdx);
     branches = branches.filter(function(b) { return b.parentMoveIndex < insertIdx; });
-    // prevEval should be the engine line cached after the move at navIdx
-    prevEval = navIdx >= 0 && moveHistory[navIdx] ? null : null; // will re-evaluate fenBefore
+    prevEval = navIdx >= 0 && moveHistory[navIdx] ? null : null;
   }
 
   var fenBefore = game.fen();
   var isWhiteTurn = game.turn() === 'w';
-  var uci = from + to;
-  var result = game.move({ from: from, to: to, promotion: 'q' });
+  var uci = from + to + (promotion !== 'q' ? promotion : '');
+  var result = game.move({ from: from, to: to, promotion: promotion });
   if (!result) {
     cg.set({ fen: game.fen(), movable: { dests: getLegalDests() } });
     return;
@@ -1585,7 +1628,6 @@ function onMove(from, to) {
     var afterLine = parsedAfter[0] || null;
 
     if (!prevEval) {
-      // First move: seed before-eval by evaluating fenBefore
       analysisPool.evaluate(fenBefore, depth, function(linesBefore) {
         var parsedBefore = parseLines(linesBefore);
         finalize(parsedBefore[0] || null, afterLine);
@@ -1941,7 +1983,19 @@ function runGameReview() {
               classification: classifyMove(prevEval, null, afterEval, uci, new Chess(allPositions[j].fen)),
               evalBefore: toCp(prevEval),
               evalAfter: toCp(afterEval),
-              evalSwing: Math.abs(toCp(prevEval) - toCp(afterEval)),
+              evalSwing: (function() {
+                var isWhite = (m.idx % 2 === 0);
+                var cpBefore = toCp(prevEval);
+                var cpAfter  = toCp(afterEval);
+                // White-relative eval (mirrors how finishReview/graphMoves computes whiteEval):
+                // idx even = White just moved; idx odd = Black just moved.
+                // Engine cp is side-to-move relative (positive = good for mover).
+                // Before the move: side-to-move is the mover, so wBefore = isWhite ? -cp : +cp
+                // After the move: side flipped, so wAfter  = isWhite ? +cp : -cp
+                var wBefore = isWhite ? -(cpBefore / 100) : (cpBefore / 100);
+                var wAfter  = isWhite ?  (cpAfter  / 100) : -(cpAfter  / 100);
+                return Math.abs(wAfter - wBefore);
+              })(),
               isWhiteTurn: (m.idx % 2 === 0),
               topBefore: prevEval,
               afterLine: afterEval
@@ -1967,7 +2021,7 @@ function finishReview(results, moves, rating) {
   for (var i = 0; i < results.length; i++) {
     var res = results[i];
     var isBook = i < 5; // first few moves considered book
-    var evalSwingPawns = res.evalSwing / 100;
+    var evalSwingPawns = res.evalSwing; // already in pawns (White-relative)
 
     var landmarkCategory = null;
     var isLandmark = false;
@@ -1979,7 +2033,9 @@ function finishReview(results, moves, rating) {
     } else if (res.classification === 'great') {
       isLandmark = true;
       landmarkCategory = 'Great';
-    } else if ((res.classification === 'best' || res.classification === 'excellent') && evalSwingPawns > 0.5 && Math.abs(res.evalAfter / 100) >= 3.0) {
+    } else if ((res.classification === 'best' || res.classification === 'excellent') && evalSwingPawns >= 1.5 && Math.abs(res.evalAfter / 100) >= 3.0) {
+      // Only flag a Best/Excellent as a landmark if it's in a decisive position (±3+)
+      // AND it caused a significant swing (≥1.5 pawns) — not just consolidating an already-won position
       isLandmark = true;
       landmarkCategory = 'Best';
     } else if (i > 0 && (res.classification === 'mistake' || res.classification === 'inaccuracy')) {
@@ -2024,7 +2080,7 @@ function finishReview(results, moves, rating) {
         color: lastRes.color,
         moveNotation: lastRes.san,
         category: 'Checkmate',
-        evalSwing: lastRes.evalSwing / 100,
+        evalSwing: lastRes.evalSwing, // already in pawns
         evalAfter: lastRes.evalAfter / 100,
         commentary: lastRes.color === 'White' ? 'White delivers checkmate!' : 'Black delivers checkmate!'
       });
@@ -2033,14 +2089,18 @@ function finishReview(results, moves, rating) {
 
   // Filter: only show landmark categories that matter (not every Best)
   var significantLandmarks = landmarks.filter(function(l) {
-    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || (l.category === 'Best' && Math.abs(l.evalAfter) >= 3.0);
+    if (l.category === 'Best') return Math.abs(l.evalAfter) >= 3.0 && l.evalSwing >= 1.5;
+    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss';
   });
 
-  // Fallback: if no significant landmarks, show the top 3 most impactful moments (excluding Best under ±3)
-  var fallbackLandmarks = landmarks.filter(function(l) {
-    return l.category !== 'Best' || Math.abs(l.evalAfter) >= 3.0;
-  }).sort(function(a, b) { return b.evalSwing - a.evalSwing; }).slice(0, 3);
-  var finalLandmarks = significantLandmarks.length > 0 ? significantLandmarks : fallbackLandmarks;
+  // Fallback: if no significant landmarks, show the top 3 most impactful (exclude Best under thresholds)
+  var fallbackPool = landmarks.filter(function(l) {
+    if (l.category === 'Best') return Math.abs(l.evalAfter) >= 3.0 && l.evalSwing >= 1.5;
+    return true;
+  });
+  var finalLandmarks = significantLandmarks.length > 0
+    ? significantLandmarks
+    : fallbackPool.sort(function(a, b) { return b.evalSwing - a.evalSwing; }).slice(0, 3);
 
   // Generate takeaway
   var blunderCount = finalLandmarks.filter(function(l) { return l.category === 'Blunder'; }).length;
@@ -2549,6 +2609,7 @@ function getMaiaTopMoves(maskedLogits, legalMoves, isBlack, temperature, count) 
 }
 
 function startMaiaGame() {
+  currentMode = 'interactive';
   game = new Chess();
   moveHistory = [];
   graphMoves.length = 0;
@@ -2571,13 +2632,15 @@ function startMaiaGame() {
 function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isWhiteAfter) {
   var beforeCp = beforeLine ? (beforeLine.cp || 0) : 0;
   var afterCp = afterLine ? (afterLine.cp || 0) : 0;
+  // isWhiteAfter = game.turn()==='b' meaning Black is to move = White just moved.
+  // Engine cp is always from the side-to-move's POV, so negate to get White-relative.
   var evBefore = (isWhiteAfter ? -beforeCp : beforeCp) / 100;
-  var evAfter = (isWhiteAfter ? -afterCp : afterCp) / 100;
+  var evAfter  = (isWhiteAfter ? -afterCp  : afterCp)  / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
-   moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
-  var graphEval = isWhiteAfter ? -evAfter : evAfter;
-  graphMoves.push({ eval: graphEval, classification: cls, moveSan: san, ply: moveHistory.length });
+  moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+  // evAfter is already White-relative — use it directly (no second flip)
+  graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
 }
 
@@ -2587,7 +2650,8 @@ function evalPosition(fen, depth, cb) {
   });
 }
 
-function onMaiaUserMove(from, to) {
+function onMaiaUserMove(from, to, promotion) {
+  promotion = promotion || 'q';
   // If navigated back, truncate history — new move becomes the latest
   if (navIdx < moveHistory.length - 1) {
     moveHistory = moveHistory.slice(0, navIdx + 1);
@@ -2596,7 +2660,7 @@ function onMaiaUserMove(from, to) {
     prevEval = null;
     navIdx = -1;
   }
-  var result = game.move({ from: from, to: to, promotion: 'q' });
+  var result = game.move({ from: from, to: to, promotion: promotion });
   if (!result) return;
   var san = result.san, uci = from + to;
   var fenAfter = game.fen();
@@ -2613,11 +2677,10 @@ function onMaiaUserMove(from, to) {
 
   function afterUserEval(afterLine) {
     var isBlackTurn = game.turn() === 'b';
-    var rawCp = afterLine ? afterLine.cp || 0 : 0;
     if (!prevEval) {
       evalPosition(fenBefore, depth, function(beforeLine) {
         var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isBlackTurn);
-        updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+        updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
         renderHistory();
         drawGraph();
         updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
@@ -2626,7 +2689,7 @@ function onMaiaUserMove(from, to) {
       });
     } else {
       var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-      updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+      updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
       renderHistory();
       drawGraph();
       updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn });
@@ -2677,9 +2740,8 @@ function doMaiaResponse(depth, rating) {
       // Evaluate Maia's move quality
       evalPosition(fenAfter, depth, function(afterLine) {
         var isBlackTurn = game.turn() === 'b';
-        var rawCp = afterLine ? afterLine.cp || 0 : 0;
         var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-        updateEvalDisplay(isBlackTurn ? -rawCp : rawCp);
+        updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
         renderHistory();
         drawGraph();
 
