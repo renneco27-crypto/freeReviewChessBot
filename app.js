@@ -3007,7 +3007,7 @@ function onMaiaUserMove(from, to, promotion) {
         updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
         prevEval = afterLine;
         // Wait for typewrite animation to finish before Maia responds
-        var _typeDelay = Math.max(200, typewriteEndTime - Date.now());
+        var _typeDelay = Math.max(3000, typewriteEndTime - Date.now());
         setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
       });
     } else {
@@ -3018,7 +3018,7 @@ function onMaiaUserMove(from, to, promotion) {
       updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
       prevEval = afterLine;
       // Wait for typewrite animation to finish before Maia responds
-      var _typeDelay = Math.max(200, typewriteEndTime - Date.now());
+      var _typeDelay = Math.max(3000, typewriteEndTime - Date.now());
       setTimeout(function() { doMaiaResponse(depth, rating); }, _typeDelay);
     }
   }
