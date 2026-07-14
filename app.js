@@ -2654,9 +2654,9 @@ function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine
   var evAfter  = (isWhiteAfter ? -afterCp  : afterCp)  / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
-  moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+  moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null, pvBefore: beforeLine ? beforeLine.pv || null : null, pvAfter: afterLine ? afterLine.pv || null : null });
   // evAfter is already White-relative — use it directly (no second flip)
-  graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
+  graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length, pvAfter: afterLine ? afterLine.pv || null : null });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
 }
 
@@ -2834,8 +2834,8 @@ function stopMaiaMode() {
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
   document.getElementById('explorerToggleBtn').style.display = 'none';
-  // Restore full movability (both sides) and white-on-bottom orientation
-  cg.set({ orientation: 'white', movable: { color: 'both', dests: getLegalDests() } });
+  // Restore full movability (both sides), keep board orientation as-is
+  cg.set({ movable: { color: 'both', dests: getLegalDests() } });
   if (moveHistory.length > 0 && !document.getElementById('pgnInput').value.trim()) {
     var t = new Chess();
     moveHistory.forEach(function(m) { t.move(m.san); });
