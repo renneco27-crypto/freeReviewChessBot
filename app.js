@@ -991,12 +991,12 @@ document.getElementById('evalCanvas').addEventListener('click', function(evt) {
     stockfishNote = ' Stockfish preferred <span class="stockfish-preview accent" data-sf-uci="' + m.bestUci + '" data-sf-fen="' + m.fenBefore + '">' + sfSan + '</span>.';
   }
   var mn = Math.floor(idx / 2) + 1;
-  var suffix = idx % 2 === 0 ? '.' : '...';
+  var suffix = m.color === 'White' ? '.' : '...';
   var moveLabel = mn + suffix + ' ' + m.san;
   var msg = '<strong>' + moveLabel + '</strong> &mdash; <span style="color:' + (MOOD_COLORS[cls] || '#c9a24b') + '">' + cls.toUpperCase() + '</span>.' + stockfishNote;
   msg += ' Eval: ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2);
   if (swing > 0.15) msg += ' (swing ' + (swing > 0 ? '+' : '') + swing.toFixed(2) + ')';
-  updateCoach({ classification: cls, currentEval: m.evalAfter, evalSwing: swing, moveSan: m.san, isWhiteToMove: idx % 2 === 0, customMsg: msg, pvAfter: m.pvAfter || null, fenAfter: m.fenAfter || null });
+  updateCoach({ classification: cls, currentEval: m.evalAfter, evalSwing: swing, moveSan: m.san, isWhiteToMove: m.color === 'White', customMsg: msg, pvAfter: m.pvAfter || null, fenAfter: m.fenAfter || null });
 });
 new ResizeObserver(drawGraph).observe(document.getElementById('evalCanvas').parentElement);
 
@@ -1192,7 +1192,7 @@ function goToMove(idx) {
   var color = MOOD_COLORS[cls] || '#c9a24b';
   var meta = CLASS_META[cls] || CLASS_META.good;
   var mn = Math.floor(idx / 2) + 1;
-  var suffix = idx % 2 === 0 ? '.' : '...';
+  var suffix = m.color === 'White' ? '.' : '...';
   coachProgress(mn + suffix + ' ' + m.san + ' &middot; <span style="color:' + color + '">' + meta.label + '</span> &middot; ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2));
   renderHistory();
   drawGraph();
@@ -2054,7 +2054,7 @@ function runGameReview() {
             results.push({
               san: m.move.san,
               moveNumber: Math.floor(m.idx / 2) + 1,
-              color: m.idx % 2 === 0 ? 'White' : 'Black',
+              color: m.move.color === 'w' ? 'White' : 'Black',
               fenBefore: allPositions[j].fen,
               fenAfter: m.fen,
               uci: uci,
@@ -2064,7 +2064,7 @@ function runGameReview() {
               evalBefore: toCp(prevEval),
               evalAfter: toCp(afterEval),
               evalSwing: (function() {
-                var isWhite = (m.idx % 2 === 0);
+                var isWhite = (m.move.color === 'w');
                 var cpBefore = toCp(prevEval);
                 var cpAfter  = toCp(afterEval);
                 // White-relative eval (mirrors how finishReview/graphMoves computes whiteEval):
@@ -2076,7 +2076,7 @@ function runGameReview() {
                 var wAfter  = isWhite ?  (cpAfter  / 100) : -(cpAfter  / 100);
                 return Math.abs(wAfter - wBefore);
               })(),
-              isWhiteTurn: (m.idx % 2 === 0),
+              isWhiteTurn: (m.move.color === 'w'),
               topBefore: prevEval,
               afterLine: afterEval
             });
@@ -2259,8 +2259,8 @@ async function finishReview(results, moves, rating) {
   if (ub) ub.style.display = 'none';
   results.forEach(function(r, idx) {
     var evPawns = r.evalAfter / 100;
-    var whiteEval = idx % 2 === 0 ? -evPawns : evPawns;
-    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null, pvBefore: r.topBefore ? r.topBefore.pv || null : null, pvAfter: r.afterLine ? r.afterLine.pv || null : null });
+    var whiteEval = r.color === 'White' ? -evPawns : evPawns;
+    moveHistory.push({ san: r.san, color: r.color, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null, pvBefore: r.topBefore ? r.topBefore.pv || null : null, pvAfter: r.afterLine ? r.afterLine.pv || null : null });
     graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
   // Sync game to end of reviewed moves so graph clicks don't replay from scratch
