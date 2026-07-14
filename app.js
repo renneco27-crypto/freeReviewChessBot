@@ -1039,6 +1039,10 @@ function renderHistory() {
   var wS = 0, wT = 0, bS = 0, bT = 0;
   moveHistory.forEach(function(m, i) {
     var v = vals[m.classification] || .65;
+    // Best moves only score as best when eval is decisively in one side's favour (±3+)
+    if ((m.classification === 'best' || m.classification === 'excellent') && Math.abs(m.evalAfter) < 3.0) {
+      v = .65; // treat as good in balanced positions
+    }
     if (i % 2 === 0) { wS += v; wT++; } else { bS += v; bT++; }
   });
   var acc = document.getElementById('accuracyDisplay');
@@ -1082,7 +1086,6 @@ function showBranchPopover(anchorEl, parentIdx) {
 function goToMove(idx) {
   if (idx < -1 || idx >= moveHistory.length) return;
   navIdx = idx;
-  clearMistakeUI();
 
   // Stop playback but keep review mode (don't cancel branch potential)
   if (playbackTimer) clearTimeout(playbackTimer);
@@ -1103,7 +1106,6 @@ function goToMove(idx) {
     drawGraph();
     coachProgress('Start position');
     updateExplorer();
-    prevEval = null;
     return;
   }
 
@@ -1117,21 +1119,33 @@ function goToMove(idx) {
   } else if (currentPly < targetPly) {
     for (var i = currentPly; i <= idx; i++) game.move(moveHistory[i].san);
   }
-  updateBoard();
   var displayCp = m.evalAfter * 100;
   if (game.turn() === 'b') displayCp = -displayCp;
   updateEvalDisplay(displayCp);
 
-  prevEval = m.afterLine || null;
-
+  // Compute the from/to squares for the target move
   var lastFrom = null, lastTo = null;
-  if (idx >= 0) {
-    var tmpPrev = new Chess();
-    for (var j = 0; j < idx; j++) { tmpPrev.move(moveHistory[j].san); }
+  if (m.fenBefore) {
+    var tmpPrev = new Chess(m.fenBefore);
     var moveObj = tmpPrev.move(m.san);
     if (moveObj) { lastFrom = moveObj.from; lastTo = moveObj.to; }
   }
-  cg.set({ lastMove: lastFrom && lastTo ? [lastFrom, lastTo] : [], check: game.in_check() ? game.turn() : false });
+  if (!lastFrom && idx >= 0) {
+    var tmpPrev2 = new Chess();
+    for (var j = 0; j < idx; j++) { tmpPrev2.move(moveHistory[j].san); }
+    var moveObj2 = tmpPrev2.move(m.san);
+    if (moveObj2) { lastFrom = moveObj2.from; lastTo = moveObj2.to; }
+  }
+
+  // Single combined cg.set so chessground animates from current visual state to target FEN
+  cg.set({
+    fen: game.fen(),
+    turnColor: toColor(game.turn()),
+    movable: { color: 'both', dests: getLegalDests() },
+    lastMove: lastFrom && lastTo ? [lastFrom, lastTo] : [],
+    check: game.in_check() ? game.turn() : false
+  });
+  cg.setShapes([]);
 
   updateNavDisplay();
 
@@ -1197,24 +1211,17 @@ function setEngineStatus(s) {
     lbl.textContent = 'Maia thinking...'; } else { lbl.textContent = 'Connecting...'; }
 }
 
-var DEBUG_ENGINE = false;
-function logEngine() {
-  if (DEBUG_ENGINE) {
-    console.log.apply(console, arguments);
-  }
-}
-
 function initEngine() {
   setEngineStatus('connect');
   POOL_SIZE = 1;
-  logEngine('[Engine] Starting init, URL:', STOCKFISH_WORKER_URL);
+  console.log('[Engine] Starting init, URL:', STOCKFISH_WORKER_URL);
 
   // Diagnose: can the Worker file be loaded at all?
   fetch(STOCKFISH_WORKER_URL).then(function(r) {
-    logEngine('[Engine] Worker file fetch:', r.status, r.statusText);
+    console.log('[Engine] Worker file fetch:', r.status, r.statusText);
     return r.text();
   }).then(function(text) {
-    logEngine('[Engine] Worker file size:', text.length, 'bytes, first 200 chars:', text.substring(0, 200));
+    console.log('[Engine] Worker file size:', text.length, 'bytes, first 200 chars:', text.substring(0, 200));
   }).catch(function(err) {
     console.error('[Engine] Worker file fetch FAILED:', err);
   });
@@ -1244,11 +1251,11 @@ function createAnalysisPool(size) {
   var queue = [];
 
   function init(idx) {
-    logEngine('[Engine] Creating worker #' + idx + ' from URL:', STOCKFISH_WORKER_URL);
+    console.log('[Engine] Creating worker #' + idx + ' from URL:', STOCKFISH_WORKER_URL);
     var w;
     try {
       w = new Worker(STOCKFISH_WORKER_URL);
-      logEngine('[Engine] Worker #' + idx + ' created successfully');
+      console.log('[Engine] Worker #' + idx + ' created successfully');
     } catch (e) {
       console.error('[Engine] Worker creation failed:', e);
       document.getElementById('engineLabel').textContent = 'Worker creation failed';
@@ -1259,26 +1266,26 @@ function createAnalysisPool(size) {
       var line = e.data;
       var type = typeof line;
       if (type !== 'string') {
-        logEngine('[Engine] Worker #' + idx + ' msg (non-string):', type, JSON.stringify(line).substring(0, 200));
+        console.log('[Engine] Worker #' + idx + ' msg (non-string):', type, JSON.stringify(line).substring(0, 200));
         return;
       }
       recentWorkerMsgs.push(line);
       if (recentWorkerMsgs.length > 50) recentWorkerMsgs.shift();
-      logEngine('[Engine] Worker #' + idx + ' says:', JSON.stringify(line.substring(0, 200)));
+      console.log('[Engine] Worker #' + idx + ' says:', JSON.stringify(line.substring(0, 200)));
       buf.push(line);
       if (line === 'uciok') {
-        logEngine('[Engine] Worker #' + idx + ' uciok → sending isready');
+        console.log('[Engine] Worker #' + idx + ' uciok → sending isready');
         w.postMessage('isready');
       }
       else if (line === 'readyok') {
-        logEngine('[Engine] Worker #' + idx + ' ready!');
+        console.log('[Engine] Worker #' + idx + ' ready!');
         readyCount++;
         busy[idx] = false;
         engineReady = true;
         if (readyCount === size) setEngineStatus('ready');
         dispatch();
       } else if (line.indexOf('bestmove') === 0) {
-        logEngine('[Engine] Worker #' + idx + ' bestmove received');
+        console.log('[Engine] Worker #' + idx + ' bestmove received');
         busy[idx] = false;
         var cb = pendingCbs[idx];
         pendingCbs[idx] = null;
@@ -1291,7 +1298,7 @@ function createAnalysisPool(size) {
       console.error('[Engine] Worker #' + idx + ' error:', e.message || e, 'file:', e.filename, 'line:', e.lineno);
       document.getElementById('engineLabel').textContent = 'Worker error: ' + (e.message || 'unknown');
     };
-    logEngine('[Engine] Worker #' + idx + ' sending: uci');
+    console.log('[Engine] Worker #' + idx + ' sending: uci');
     w.postMessage('uci');
     workers.push(w);
     busy.push(true);
@@ -1342,7 +1349,7 @@ function parseLines(lines) {
     var pvIdM = l.match(/\bmultipv (\d+)/);
     var depM = l.match(/\bdepth (\d+)/);
     if (!pvM) return;
-    var pvId = pvIdM ? +pvIdM[1] : 1, dep = depM ? +depM[1] : 0;
+    var pvId = pvIdM ? +pvM[1] : 1, dep = depM ? +depM[1] : 0;
     if (!byPV[pvId] || dep > byPV[pvId].dep) {
       var pvFull = l.match(/\bpv\s+(.+)/);
       var pvArr = pvFull ? pvFull[1].trim().split(/\s+/) : [pvM[1]];
@@ -1500,10 +1507,14 @@ function onMove(from, to) {
     return;
   }
 
-  // Truncate history if making a move from an earlier position
-  if (navIdx < moveHistory.length - 1) {
-    moveHistory = moveHistory.slice(0, navIdx + 1);
-    graphMoves = graphMoves.slice(0, navIdx + 1);
+  // If we navigated back and are now playing a new move, truncate the future
+  var insertIdx = navIdx + 1; // where the new move goes
+  if (insertIdx < moveHistory.length) {
+    moveHistory.splice(insertIdx);
+    graphMoves.splice(insertIdx);
+    branches = branches.filter(function(b) { return b.parentMoveIndex < insertIdx; });
+    // prevEval should be the engine line cached after the move at navIdx
+    prevEval = navIdx >= 0 && moveHistory[navIdx] ? null : null; // will re-evaluate fenBefore
   }
 
   var fenBefore = game.fen();
@@ -1545,18 +1556,7 @@ function onMove(from, to) {
 
     updateEvalDisplay(afterCpWhite);
 
-    moveHistory.push({
-      san: san,
-      classification: cls,
-      evalBefore: evBefore,
-      evalAfter: evAfter,
-      fenBefore: fenBefore,
-      fenAfter: fenAfter,
-      bestUci: beforeLine ? beforeLine.move : null,
-      pvBefore: beforeLine ? beforeLine.pv || null : null,
-      pvAfter: afterLine ? afterLine.pv || null : null,
-      afterLine: afterLine || null
-    });
+    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null, pvBefore: beforeLine ? beforeLine.pv || null : null, pvAfter: afterLine ? afterLine.pv || null : null });
     graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
     navIdx = moveHistory.length - 1;
     renderHistory();
@@ -1979,7 +1979,7 @@ function finishReview(results, moves, rating) {
     } else if (res.classification === 'great') {
       isLandmark = true;
       landmarkCategory = 'Great';
-    } else if ((res.classification === 'best' || res.classification === 'excellent') && evalSwingPawns > 0.5) {
+    } else if ((res.classification === 'best' || res.classification === 'excellent') && evalSwingPawns > 0.5 && Math.abs(res.evalAfter / 100) >= 3.0) {
       isLandmark = true;
       landmarkCategory = 'Best';
     } else if (i > 0 && (res.classification === 'mistake' || res.classification === 'inaccuracy')) {
@@ -2033,11 +2033,14 @@ function finishReview(results, moves, rating) {
 
   // Filter: only show landmark categories that matter (not every Best)
   var significantLandmarks = landmarks.filter(function(l) {
-    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || (l.category === 'Best' && (l.evalSwing > 1.0 || Math.abs(l.evalAfter) >= 3.0));
+    return l.category === 'Checkmate' || l.category === 'Blunder' || l.category === 'Brilliant' || l.category === 'Great' || l.category === 'Miss' || (l.category === 'Best' && Math.abs(l.evalAfter) >= 3.0);
   });
 
-  // Fallback: if no significant landmarks, show the top 3 most impactful moments
-  var finalLandmarks = significantLandmarks.length > 0 ? significantLandmarks : landmarks.sort(function(a, b) { return b.evalSwing - a.evalSwing; }).slice(0, 3);
+  // Fallback: if no significant landmarks, show the top 3 most impactful moments (excluding Best under ±3)
+  var fallbackLandmarks = landmarks.filter(function(l) {
+    return l.category !== 'Best' || Math.abs(l.evalAfter) >= 3.0;
+  }).sort(function(a, b) { return b.evalSwing - a.evalSwing; }).slice(0, 3);
+  var finalLandmarks = significantLandmarks.length > 0 ? significantLandmarks : fallbackLandmarks;
 
   // Generate takeaway
   var blunderCount = finalLandmarks.filter(function(l) { return l.category === 'Blunder'; }).length;
@@ -2074,18 +2077,7 @@ function finishReview(results, moves, rating) {
   results.forEach(function(r, idx) {
     var evPawns = r.evalAfter / 100;
     var whiteEval = idx % 2 === 0 ? -evPawns : evPawns;
-    moveHistory.push({
-      san: r.san,
-      classification: r.classification,
-      evalBefore: r.evalBefore / 100,
-      evalAfter: evPawns,
-      fenBefore: r.fenBefore,
-      fenAfter: r.fenAfter,
-      bestUci: r.topBefore ? r.topBefore.move : null,
-      pvBefore: r.topBefore ? r.topBefore.pv || null : null,
-      pvAfter: r.afterLine ? r.afterLine.pv || null : null,
-      afterLine: r.afterLine || null
-    });
+    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null, pvBefore: r.topBefore ? r.topBefore.pv || null : null, pvAfter: r.afterLine ? r.afterLine.pv || null : null });
     graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
   // Sync game to end of reviewed moves so graph clicks don't replay from scratch
@@ -2121,6 +2113,7 @@ function generateReviewCommentary(category, res, bestMoveHuman, isBook) {
 // ═══════════════════════════════════════════════════════
 var playbackTimer = null;
 var playbackCancelled = false;
+var reviewPhase = 'navigate'; // 'navigate' | 'takeaway'
 
 function startLandmarkPlayback() {
   if (!reviewData || reviewData.landmarks.length === 0) {
@@ -2141,6 +2134,7 @@ function startLandmarkPlayback() {
 function advanceToLandmark(idx) {
   if (playbackCancelled || idx >= reviewData.landmarks.length) {
     document.getElementById('landmarkNavRow').style.display = 'none';
+    reviewPhase = 'takeaway';
     showTakeaway();
     return;
   }
@@ -2201,13 +2195,6 @@ function showLandmark(landmark) {
   renderHistory();
   updateLandmarkCounter();
 
-  // Reset/hide "Why?" button first
-  var whyBtn = document.getElementById('whyMistakeBtn');
-  if (whyBtn) {
-    whyBtn.style.display = 'none';
-    document.getElementById('refutationDisplay').innerHTML = '';
-  }
-
   var cat = landmark.category;
   var moodMap = { Book: 'book', Brilliant: 'brilliant', Great: 'great', Best: 'best', Blunder: 'blunder', Miss: 'inaccuracy' };
   var mood = moodMap[cat] || 'good';
@@ -2239,26 +2226,21 @@ function showLandmark(landmark) {
   el.innerHTML = html;
   el.classList.remove('typing');
 
-  // Find matching move in moveHistory to set refutation targets
-  var matchingMove = null;
-  for (var i = 0; i < moveHistory.length; i++) {
-    var m = moveHistory[i];
-    var mn = Math.floor(i / 2) + 1;
-    var colorName = i % 2 === 0 ? 'White' : 'Black';
-    if (mn === landmark.moveNumber && colorName === landmark.color && m.san === landmark.moveNotation) {
-      matchingMove = m;
-      break;
-    }
+  // Show "Why this is a mistake" button for bad landmarks
+  var isBad = (cat === 'Blunder' || cat === 'Mistake' || cat === 'Miss');
+  var lmMoveIdx = navIdx >= 0 ? navIdx : -1;
+  var lmMoveData = lmMoveIdx >= 0 ? moveHistory[lmMoveIdx] : null;
+  var pvAfter = lmMoveData ? (lmMoveData.pvAfter || null) : null;
+  var fenAfter = lmMoveData ? (lmMoveData.fenAfter || null) : null;
+  window._lastPv = isBad && pvAfter ? pvAfter : null;
+  window._lastFen = isBad && fenAfter ? fenAfter : null;
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) {
+    whyBtn.style.display = isBad && pvAfter ? 'inline-block' : 'none';
+    document.getElementById('refutationDisplay').innerHTML = '';
   }
-
-  if (matchingMove) {
-    window._lastPv = matchingMove.pvAfter || null;
-    window._lastFen = matchingMove.fenAfter || null;
-    var isBad = ['Blunder', 'Miss'].indexOf(cat) !== -1 || ['blunder', 'inaccuracy'].indexOf(mood) !== -1;
-    if (whyBtn && isBad && window._lastPv) {
-      whyBtn.style.display = 'inline-block';
-    }
-  }
+  var stopBtn = document.getElementById('refStopBtn');
+  if (stopBtn) stopBtn.style.display = 'none';
 }
 
 function showTakeaway() {
@@ -2307,6 +2289,7 @@ function cancelReview() {
   playbackCancelled = true;
   document.getElementById('landmarkNavRow').style.display = 'none';
   currentMode = 'interactive';
+  reviewPhase = 'navigate';
   branches = [];
   branchState.mode = 'mainline';
   branchState.activeBranchId = null;
@@ -2572,7 +2555,6 @@ function startMaiaGame() {
   prevEval = null;
   maiaHistory = [];
   navIdx = -1;
-  isAnalysing = false;
   updateBoard();
   updateEvalDisplay(0);
   renderHistory();
@@ -2593,18 +2575,7 @@ function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine
   var evAfter = (isWhiteAfter ? -afterCp : afterCp) / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
-   moveHistory.push({
-     san: san,
-     classification: cls,
-     evalBefore: evBefore,
-     evalAfter: evAfter,
-     fenBefore: fenBefore,
-     fenAfter: fenAfter,
-     bestUci: beforeLine ? beforeLine.move : null,
-     pvBefore: beforeLine ? beforeLine.pv || null : null,
-     pvAfter: afterLine ? afterLine.pv || null : null,
-     afterLine: afterLine || null
-   });
+   moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
   var graphEval = isWhiteAfter ? -evAfter : evAfter;
   graphMoves.push({ eval: graphEval, classification: cls, moveSan: san, ply: moveHistory.length });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
@@ -2759,7 +2730,6 @@ function finishMaiaGame(msg, lastSan, lastUci, lastFen) {
 function stopMaiaMode() {
   maiaMode = false;
   maiaHistory = [];
-  isAnalysing = false;
   document.getElementById('coachPlayBtn').classList.remove('active-coach');
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
@@ -3085,6 +3055,7 @@ function renderSyncGames(games) {
 function doSync() {
   var username = document.getElementById('chessUserInput').value.trim();
   if (!username) { document.getElementById('syncStatus').textContent = 'Enter a username'; return; }
+  try { localStorage.setItem('chessCoach.chessUser', username); } catch(e) {}
   _syncPage = 0;
   document.getElementById('syncStatus').textContent = 'Fetching archives...';
   document.getElementById('syncGameList').innerHTML = '';
@@ -3126,13 +3097,7 @@ document.getElementById('chessUserInput').addEventListener('keydown', function(e
   if (e.key === 'Enter') doSync();
 });
 
-// Patch the sync to save username
-var _origSync = doSync;
-doSync = function() {
-  var u = document.getElementById('chessUserInput').value.trim();
-  if (u) localStorage.setItem('chessCoach.chessUser', u);
-  _origSync();
-};
+
 
 // ═══════════════════════════════════════════════════════
 // INIT
