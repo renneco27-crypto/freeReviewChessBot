@@ -305,6 +305,12 @@ function _speakEdgeTTS(plain) {
     }).catch(function() { _speakBrowser(plain); });
 }
 
+function cancelTTS() {
+  _ttsCallback = null;
+  if (ttsAudio) { ttsAudio.pause(); URL.revokeObjectURL(ttsAudio.src); ttsAudio = null; }
+  if (_synth) _synth.cancel();
+}
+
 function speakText(text) {
   if (!ttsEnabled) return;
   var plain = text.replace(/<[^>]+>/g, '').trim();
@@ -1433,6 +1439,26 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
   if (onlyMove) return 'blunder';
 
   if (detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore)) return 'brilliant';
+
+  // LOSING CAPTURE OVERRIDE: if we moved onto a defended square and lost significant
+  // material (net >= 4 pawns), it's a blunder regardless of eval-delta thresholds.
+  // This catches e.g. queen takes defended bishop — eval may only shift "moderately"
+  // yet we're down a queen for a bishop (~5 pawns net), which is always a blunder.
+  if (boardBefore && delta >= 200) {
+    var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
+    var movingPiece = boardBefore.get(from);
+    var capturedPiece = boardBefore.get(to);
+    if (movingPiece && capturedPiece) {
+      var PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+      var attackerVal = PIECE_VAL[movingPiece.type] || 0;
+      var captureVal  = PIECE_VAL[capturedPiece.type] || 0;
+      var opponentColor = movingPiece.color === 'w' ? 'b' : 'w';
+      var squareDefended = boardBefore.isSquareAttacked(to, opponentColor);
+      // Net material: we gain captureVal but lose attackerVal if square is defended
+      var netLoss = squareDefended ? (attackerVal - captureVal) : 0;
+      if (netLoss >= 4) return 'blunder'; // e.g. queen (9) - bishop (3) = 6 net loss
+    }
+  }
 
   var cats = ['best', 'excellent', 'good', 'inaccuracy', 'mistake'];
   for (var i = 0; i < cats.length; i++) {
@@ -2975,12 +3001,17 @@ function evalPosition(fen, depth, cb) {
 
 function onMaiaUserMove(from, to, promotion) {
   promotion = promotion || 'q';
+  // Cancel any in-flight TTS/coach commentary so it doesn't fire doMaiaResponse mid-move
+  cancelTTS();
   // If navigated back in history, truncate history — new move becomes the latest
   // BUT: navIdx === -1 means "not navigated to any specific move" (just viewing the board)
   // In this case, we're at the end of moveHistory, so don't truncate!
   if (navIdx >= 0 && navIdx < moveHistory.length - 1) {
     moveHistory = moveHistory.slice(0, navIdx + 1);
     graphMoves = graphMoves.slice(0, navIdx + 1);
+    // Trim gameHistory to match — keeps only positions up to navIdx+1 moves played
+    // gameHistory[0] is the starting position, entries 1..N correspond to moves 0..N-1
+    gameHistory = gameHistory.slice(0, navIdx + 2);
     maiaHistory = [];
     prevEval = null;
     navIdx = -1;
