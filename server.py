@@ -15,6 +15,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return MIME_MAP[ext]
         return super().guess_type(path)
 
+    def is_path_forbidden(self):
+        translated = self.translate_path(self.path)
+        serving_dir = getattr(self, 'directory', None) or os.getcwd()
+        try:
+            rel = os.path.relpath(translated, serving_dir)
+            parts = rel.split(os.sep)
+            for part in parts:
+                if part.startswith('.') and part not in ('.', '..'):
+                    return True
+        except Exception:
+            return True
+        return False
+
+    def do_GET(self):
+        if self.is_path_forbidden():
+            self.send_error(403, "Access denied")
+            return
+        super().do_GET()
+
+    def do_HEAD(self):
+        if self.is_path_forbidden():
+            self.send_error(403, "Access denied")
+            return
+        super().do_HEAD()
+
     def end_headers(self):
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Embedder-Policy', 'credentialless')

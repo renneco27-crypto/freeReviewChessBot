@@ -433,20 +433,163 @@ function updateCoach(data) {
   typewrite(html);
 }
 
+// ── Refutation Replay State ──
+var _refReplayTimer = null;
+var _refReplayFenSaved = null;
+
+function clearMistakeUI() {
+  window._lastPv = null;
+  window._lastFen = null;
+  if (_refReplayTimer) { clearTimeout(_refReplayTimer); _refReplayTimer = null; }
+  _refReplayFenSaved = null;
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) whyBtn.style.display = 'none';
+  var stopBtn = document.getElementById('refStopBtn');
+  if (stopBtn) stopBtn.style.display = 'none';
+  var refDisplay = document.getElementById('refutationDisplay');
+  if (refDisplay) refDisplay.innerHTML = '';
+}
+
+function stopRefutationReplay() {
+  if (_refReplayTimer) { clearTimeout(_refReplayTimer); _refReplayTimer = null; }
+  if (_refReplayFenSaved) {
+    cg.set({ fen: _refReplayFenSaved, movable: { color: 'both', dests: getLegalDests() } });
+    cg.setShapes([]);
+    _refReplayFenSaved = null;
+  }
+  var stopBtn = document.getElementById('refStopBtn');
+  if (stopBtn) stopBtn.style.display = 'none';
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) whyBtn.style.display = 'inline-block';
+}
+
 function showRefutation() {
   var pv = window._lastPv;
   var fen = window._lastFen;
   if (!pv || pv.length < 2 || !fen) return;
+
+  // Stop any running replay first
+  if (_refReplayTimer) { clearTimeout(_refReplayTimer); _refReplayTimer = null; }
+
+  // Build the refutation move list (SAN + UCI pairs)
   var g = new Chess(fen);
-  var html = '<span style="font-size:10px;color:var(--text-mute)">Refutation:</span> ';
-  for (var i = 0; i < Math.min(pv.length, 5); i++) {
+  var moves = [];
+  for (var i = 0; i < Math.min(pv.length, 6); i++) {
     var u = pv[i];
     var mr = g.move({ from: u.slice(0,2), to: u.slice(2,4), promotion: u.length > 4 ? u[4] : 'q' });
     if (!mr) break;
-    html += '<span class="ref-move' + (i % 2 === 0 ? ' opp' : '') + '">' + mr.san + '</span> ';
+    moves.push({ san: mr.san, from: mr.from, to: mr.to, fenAfter: g.fen(), isOpp: i % 2 === 0 });
+  }
+  if (!moves.length) return;
+
+  // Render refutation text in the dialogue box
+  var html = '<span style="font-size:10px;color:var(--text-mute)">Best reply:</span> ';
+  for (var j = 0; j < moves.length; j++) {
+    html += '<span class="ref-move' + (moves[j].isOpp ? ' opp' : '') + '" id="refMv' + j + '">' + moves[j].san + '</span> ';
   }
   document.getElementById('refutationDisplay').innerHTML = html;
   document.getElementById('whyMistakeBtn').style.display = 'none';
+
+  // Show stop button
+  var stopBtn = document.getElementById('refStopBtn');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
+
+  // Save current board state so we can restore it
+  _refReplayFenSaved = fen;
+
+  // Build voice narration
+  var oppColor = new Chess(fen).turn() === 'w' ? 'White' : 'Black';
+  var narration = buildRefutationNarration(moves, oppColor);
+
+  // Speak the narration
+  speakText(narration);
+
+  // Animate each move on the board with delay
+  var delay = 900;
+  var startDelay = 400;
+
+  function animateStep(idx) {
+    if (idx >= moves.length) {
+      // After last move, pause then restore board
+      _refReplayTimer = setTimeout(function() {
+        stopRefutationReplay();
+      }, 2200);
+      return;
+    }
+
+    _refReplayTimer = setTimeout(function() {
+      var mv = moves[idx];
+
+      // Highlight the active move chip in the refutation text
+      var chips = document.querySelectorAll('#refutationDisplay .ref-move');
+      for (var k = 0; k < chips.length; k++) {
+        chips[k].classList.toggle('ref-move-active', k === idx);
+      }
+
+      // Show colored arrow: red for opponent, teal for player response
+      var brush = mv.isOpp ? 'red' : 'paleBlue';
+      cg.setShapes([{ orig: mv.from, dest: mv.to, brush: brush }]);
+
+      // Animate the piece on the board
+      cg.set({
+        fen: mv.fenAfter,
+        lastMove: [mv.from, mv.to],
+        movable: { color: 'both', dests: new Map() } // lock interaction during replay
+      });
+
+      animateStep(idx + 1);
+    }, idx === 0 ? startDelay : delay);
+  }
+
+  animateStep(0);
+}
+
+function buildRefutationNarration(moves, oppColor) {
+  if (!moves.length) return '';
+  var lines = [];
+  var firstOppMove = moves[0].san;
+
+  // Describe the punishment
+  lines.push('Here is why: ' + oppColor + ' replies with ' + readSan(firstOppMove) + '.');
+
+  if (moves.length >= 2) {
+    lines.push('After ' + readSan(moves[1].san) + ',');
+  }
+  if (moves.length >= 3) {
+    lines.push(oppColor + ' continues with ' + readSan(moves[2].san) + ',');
+  }
+  if (moves.length >= 4) {
+    lines.push('and then ' + readSan(moves[3].san) + '.');
+  } else {
+    lines[lines.length - 1] = lines[lines.length - 1].replace(/,$/, '.');
+  }
+
+  lines.push('This sequence shows the position is now much harder to defend.');
+  return lines.join(' ');
+}
+
+// Convert SAN notation to speakable text
+function readSan(san) {
+  if (!san) return san;
+  var PIECE_NAMES = { K: 'King', Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight' };
+  var s = san;
+  // Castling
+  if (s === 'O-O-O') return 'Queen-side castling';
+  if (s === 'O-O') return 'King-side castling';
+  // Strip check/mate symbols for reading
+  s = s.replace(/[+#!?]/g, '');
+  // Capture word
+  s = s.replace('x', ' takes ');
+  // Promotion
+  s = s.replace(/=([QRBN])/, function(_, p) { return ', promoting to ' + (PIECE_NAMES[p] || p); });
+  // Named piece prefix
+  var piece = PIECE_NAMES[s[0]];
+  if (piece) {
+    s = piece + ' ' + s.slice(1).trim();
+  }
+  // Spread out squares for clarity: e4 → "E 4"
+  s = s.replace(/\b([a-h])([1-8])\b/g, function(_, f, r) { return f.toUpperCase() + ' ' + r; });
+  return s;
 }
 
 function triggerFx(cls) {
@@ -510,6 +653,7 @@ function typewrite(html) {
 }
 
 function coachReset(text) {
+  clearMistakeUI();
   var color = '#c9a24b';
   var bot = document.getElementById('coachBot');
   var box = document.getElementById('dialogueBox');
@@ -938,6 +1082,7 @@ function showBranchPopover(anchorEl, parentIdx) {
 function goToMove(idx) {
   if (idx < -1 || idx >= moveHistory.length) return;
   navIdx = idx;
+  clearMistakeUI();
 
   // Stop playback but keep review mode (don't cancel branch potential)
   if (playbackTimer) clearTimeout(playbackTimer);
@@ -958,6 +1103,7 @@ function goToMove(idx) {
     drawGraph();
     coachProgress('Start position');
     updateExplorer();
+    prevEval = null;
     return;
   }
 
@@ -975,6 +1121,8 @@ function goToMove(idx) {
   var displayCp = m.evalAfter * 100;
   if (game.turn() === 'b') displayCp = -displayCp;
   updateEvalDisplay(displayCp);
+
+  prevEval = m.afterLine || null;
 
   var lastFrom = null, lastTo = null;
   if (idx >= 0) {
@@ -1049,17 +1197,24 @@ function setEngineStatus(s) {
     lbl.textContent = 'Maia thinking...'; } else { lbl.textContent = 'Connecting...'; }
 }
 
+var DEBUG_ENGINE = false;
+function logEngine() {
+  if (DEBUG_ENGINE) {
+    console.log.apply(console, arguments);
+  }
+}
+
 function initEngine() {
   setEngineStatus('connect');
   POOL_SIZE = 1;
-  console.log('[Engine] Starting init, URL:', STOCKFISH_WORKER_URL);
+  logEngine('[Engine] Starting init, URL:', STOCKFISH_WORKER_URL);
 
   // Diagnose: can the Worker file be loaded at all?
   fetch(STOCKFISH_WORKER_URL).then(function(r) {
-    console.log('[Engine] Worker file fetch:', r.status, r.statusText);
+    logEngine('[Engine] Worker file fetch:', r.status, r.statusText);
     return r.text();
   }).then(function(text) {
-    console.log('[Engine] Worker file size:', text.length, 'bytes, first 200 chars:', text.substring(0, 200));
+    logEngine('[Engine] Worker file size:', text.length, 'bytes, first 200 chars:', text.substring(0, 200));
   }).catch(function(err) {
     console.error('[Engine] Worker file fetch FAILED:', err);
   });
@@ -1089,11 +1244,11 @@ function createAnalysisPool(size) {
   var queue = [];
 
   function init(idx) {
-    console.log('[Engine] Creating worker #' + idx + ' from URL:', STOCKFISH_WORKER_URL);
+    logEngine('[Engine] Creating worker #' + idx + ' from URL:', STOCKFISH_WORKER_URL);
     var w;
     try {
       w = new Worker(STOCKFISH_WORKER_URL);
-      console.log('[Engine] Worker #' + idx + ' created successfully');
+      logEngine('[Engine] Worker #' + idx + ' created successfully');
     } catch (e) {
       console.error('[Engine] Worker creation failed:', e);
       document.getElementById('engineLabel').textContent = 'Worker creation failed';
@@ -1104,26 +1259,26 @@ function createAnalysisPool(size) {
       var line = e.data;
       var type = typeof line;
       if (type !== 'string') {
-        console.log('[Engine] Worker #' + idx + ' msg (non-string):', type, JSON.stringify(line).substring(0, 200));
+        logEngine('[Engine] Worker #' + idx + ' msg (non-string):', type, JSON.stringify(line).substring(0, 200));
         return;
       }
       recentWorkerMsgs.push(line);
       if (recentWorkerMsgs.length > 50) recentWorkerMsgs.shift();
-      console.log('[Engine] Worker #' + idx + ' says:', JSON.stringify(line.substring(0, 200)));
+      logEngine('[Engine] Worker #' + idx + ' says:', JSON.stringify(line.substring(0, 200)));
       buf.push(line);
       if (line === 'uciok') {
-        console.log('[Engine] Worker #' + idx + ' uciok → sending isready');
+        logEngine('[Engine] Worker #' + idx + ' uciok → sending isready');
         w.postMessage('isready');
       }
       else if (line === 'readyok') {
-        console.log('[Engine] Worker #' + idx + ' ready!');
+        logEngine('[Engine] Worker #' + idx + ' ready!');
         readyCount++;
         busy[idx] = false;
         engineReady = true;
         if (readyCount === size) setEngineStatus('ready');
         dispatch();
       } else if (line.indexOf('bestmove') === 0) {
-        console.log('[Engine] Worker #' + idx + ' bestmove received');
+        logEngine('[Engine] Worker #' + idx + ' bestmove received');
         busy[idx] = false;
         var cb = pendingCbs[idx];
         pendingCbs[idx] = null;
@@ -1136,7 +1291,7 @@ function createAnalysisPool(size) {
       console.error('[Engine] Worker #' + idx + ' error:', e.message || e, 'file:', e.filename, 'line:', e.lineno);
       document.getElementById('engineLabel').textContent = 'Worker error: ' + (e.message || 'unknown');
     };
-    console.log('[Engine] Worker #' + idx + ' sending: uci');
+    logEngine('[Engine] Worker #' + idx + ' sending: uci');
     w.postMessage('uci');
     workers.push(w);
     busy.push(true);
@@ -1187,7 +1342,7 @@ function parseLines(lines) {
     var pvIdM = l.match(/\bmultipv (\d+)/);
     var depM = l.match(/\bdepth (\d+)/);
     if (!pvM) return;
-    var pvId = pvIdM ? +pvM[1] : 1, dep = depM ? +depM[1] : 0;
+    var pvId = pvIdM ? +pvIdM[1] : 1, dep = depM ? +depM[1] : 0;
     if (!byPV[pvId] || dep > byPV[pvId].dep) {
       var pvFull = l.match(/\bpv\s+(.+)/);
       var pvArr = pvFull ? pvFull[1].trim().split(/\s+/) : [pvM[1]];
@@ -1345,6 +1500,12 @@ function onMove(from, to) {
     return;
   }
 
+  // Truncate history if making a move from an earlier position
+  if (navIdx < moveHistory.length - 1) {
+    moveHistory = moveHistory.slice(0, navIdx + 1);
+    graphMoves = graphMoves.slice(0, navIdx + 1);
+  }
+
   var fenBefore = game.fen();
   var isWhiteTurn = game.turn() === 'w';
   var uci = from + to;
@@ -1384,7 +1545,18 @@ function onMove(from, to) {
 
     updateEvalDisplay(afterCpWhite);
 
-    moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null, pvBefore: beforeLine ? beforeLine.pv || null : null, pvAfter: afterLine ? afterLine.pv || null : null });
+    moveHistory.push({
+      san: san,
+      classification: cls,
+      evalBefore: evBefore,
+      evalAfter: evAfter,
+      fenBefore: fenBefore,
+      fenAfter: fenAfter,
+      bestUci: beforeLine ? beforeLine.move : null,
+      pvBefore: beforeLine ? beforeLine.pv || null : null,
+      pvAfter: afterLine ? afterLine.pv || null : null,
+      afterLine: afterLine || null
+    });
     graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length });
     navIdx = moveHistory.length - 1;
     renderHistory();
@@ -1716,6 +1888,7 @@ function runGameReview() {
     return;
   }
 
+  clearMistakeUI();
   currentMode = 'review';
   reviewData = null;
   isAnalysing = true;
@@ -1901,7 +2074,18 @@ function finishReview(results, moves, rating) {
   results.forEach(function(r, idx) {
     var evPawns = r.evalAfter / 100;
     var whiteEval = idx % 2 === 0 ? -evPawns : evPawns;
-    moveHistory.push({ san: r.san, classification: r.classification, evalBefore: r.evalBefore / 100, evalAfter: evPawns, fenBefore: r.fenBefore, fenAfter: r.fenAfter, bestUci: r.topBefore ? r.topBefore.move : null, pvBefore: r.topBefore ? r.topBefore.pv || null : null, pvAfter: r.afterLine ? r.afterLine.pv || null : null });
+    moveHistory.push({
+      san: r.san,
+      classification: r.classification,
+      evalBefore: r.evalBefore / 100,
+      evalAfter: evPawns,
+      fenBefore: r.fenBefore,
+      fenAfter: r.fenAfter,
+      bestUci: r.topBefore ? r.topBefore.move : null,
+      pvBefore: r.topBefore ? r.topBefore.pv || null : null,
+      pvAfter: r.afterLine ? r.afterLine.pv || null : null,
+      afterLine: r.afterLine || null
+    });
     graphMoves.push({ eval: whiteEval, classification: r.classification, moveSan: r.san, ply: moveHistory.length });
   });
   // Sync game to end of reviewed moves so graph clicks don't replay from scratch
@@ -1937,7 +2121,6 @@ function generateReviewCommentary(category, res, bestMoveHuman, isBook) {
 // ═══════════════════════════════════════════════════════
 var playbackTimer = null;
 var playbackCancelled = false;
-var reviewPhase = 'navigate'; // 'navigate' | 'takeaway'
 
 function startLandmarkPlayback() {
   if (!reviewData || reviewData.landmarks.length === 0) {
@@ -1958,7 +2141,6 @@ function startLandmarkPlayback() {
 function advanceToLandmark(idx) {
   if (playbackCancelled || idx >= reviewData.landmarks.length) {
     document.getElementById('landmarkNavRow').style.display = 'none';
-    reviewPhase = 'takeaway';
     showTakeaway();
     return;
   }
@@ -2019,6 +2201,13 @@ function showLandmark(landmark) {
   renderHistory();
   updateLandmarkCounter();
 
+  // Reset/hide "Why?" button first
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) {
+    whyBtn.style.display = 'none';
+    document.getElementById('refutationDisplay').innerHTML = '';
+  }
+
   var cat = landmark.category;
   var moodMap = { Book: 'book', Brilliant: 'brilliant', Great: 'great', Best: 'best', Blunder: 'blunder', Miss: 'inaccuracy' };
   var mood = moodMap[cat] || 'good';
@@ -2049,6 +2238,27 @@ function showLandmark(landmark) {
   if (typeTimer) clearInterval(typeTimer);
   el.innerHTML = html;
   el.classList.remove('typing');
+
+  // Find matching move in moveHistory to set refutation targets
+  var matchingMove = null;
+  for (var i = 0; i < moveHistory.length; i++) {
+    var m = moveHistory[i];
+    var mn = Math.floor(i / 2) + 1;
+    var colorName = i % 2 === 0 ? 'White' : 'Black';
+    if (mn === landmark.moveNumber && colorName === landmark.color && m.san === landmark.moveNotation) {
+      matchingMove = m;
+      break;
+    }
+  }
+
+  if (matchingMove) {
+    window._lastPv = matchingMove.pvAfter || null;
+    window._lastFen = matchingMove.fenAfter || null;
+    var isBad = ['Blunder', 'Miss'].indexOf(cat) !== -1 || ['blunder', 'inaccuracy'].indexOf(mood) !== -1;
+    if (whyBtn && isBad && window._lastPv) {
+      whyBtn.style.display = 'inline-block';
+    }
+  }
 }
 
 function showTakeaway() {
@@ -2097,7 +2307,6 @@ function cancelReview() {
   playbackCancelled = true;
   document.getElementById('landmarkNavRow').style.display = 'none';
   currentMode = 'interactive';
-  reviewPhase = 'navigate';
   branches = [];
   branchState.mode = 'mainline';
   branchState.activeBranchId = null;
@@ -2363,6 +2572,7 @@ function startMaiaGame() {
   prevEval = null;
   maiaHistory = [];
   navIdx = -1;
+  isAnalysing = false;
   updateBoard();
   updateEvalDisplay(0);
   renderHistory();
@@ -2383,7 +2593,18 @@ function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine
   var evAfter = (isWhiteAfter ? -afterCp : afterCp) / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
-   moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null });
+   moveHistory.push({
+     san: san,
+     classification: cls,
+     evalBefore: evBefore,
+     evalAfter: evAfter,
+     fenBefore: fenBefore,
+     fenAfter: fenAfter,
+     bestUci: beforeLine ? beforeLine.move : null,
+     pvBefore: beforeLine ? beforeLine.pv || null : null,
+     pvAfter: afterLine ? afterLine.pv || null : null,
+     afterLine: afterLine || null
+   });
   var graphEval = isWhiteAfter ? -evAfter : evAfter;
   graphMoves.push({ eval: graphEval, classification: cls, moveSan: san, ply: moveHistory.length });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
@@ -2538,6 +2759,7 @@ function finishMaiaGame(msg, lastSan, lastUci, lastFen) {
 function stopMaiaMode() {
   maiaMode = false;
   maiaHistory = [];
+  isAnalysing = false;
   document.getElementById('coachPlayBtn').classList.remove('active-coach');
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
@@ -2555,6 +2777,7 @@ function stopMaiaMode() {
 document.getElementById('positionBtn').addEventListener('click', function() {
   if (maiaMode) stopMaiaMode();
   cancelReview();
+  clearMistakeUI();
   var fen = document.getElementById('fenInput').value.trim();
   if (!fen) return;
   var test = new Chess();
@@ -2624,6 +2847,7 @@ document.getElementById('reviewBtn').addEventListener('click', function() {
 document.getElementById('clearBtn').addEventListener('click', function() {
   if (maiaMode) stopMaiaMode();
   cancelReview();
+  clearMistakeUI();
   document.getElementById('pgnInput').value = '';
   game = new Chess();
   moveHistory = [];

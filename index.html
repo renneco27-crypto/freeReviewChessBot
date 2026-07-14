@@ -138,7 +138,10 @@
           <span class="dialogue-icon" id="dialogueIconEl">&#10003;</span>
         </div>
         <p class="dialogue-text" id="dialogueText">Ready when you are. Make a move or paste a PGN to review a game.</p>
-        <button class="btn-why" id="whyMistakeBtn" style="display:none" onclick="showRefutation()">&#9888; Why this is a mistake</button>
+        <div class="why-row">
+          <button class="btn-why" id="whyMistakeBtn" style="display:none" onclick="showRefutation()">&#9888; Why this is a mistake</button>
+          <button class="btn-stop-replay" id="refStopBtn" style="display:none" onclick="stopRefutationReplay()">&#9646;&#9646; Stop replay</button>
+        </div>
         <div id="refutationDisplay" class="refutation-box"></div>
       </div>
     </div>
