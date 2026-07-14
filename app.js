@@ -8,6 +8,12 @@ var RATING_STORAGE_KEY = 'chessCoachRating';
 var REVIEW_DEPTH = 10;
 var REVIEW_DEPTH_DEEP = 14;
 var POOL_SIZE = 1;
+var MISTRAL_API_KEY = '';
+
+// Fetch config from server
+fetch('/api/config').then(function(r) { return r.json(); }).then(function(cfg) {
+  MISTRAL_API_KEY = cfg.MISTRAL_API_KEY || '';
+}).catch(function() { /* no-op, static fallback used */ });
 
 // ═══════════════════════════════════════════════════════
 // CLASSIFICATION DATA
@@ -566,13 +572,6 @@ function showRefutation() {
 
   // Save current board state so we can restore it
   _refReplayFenSaved = fen;
-
-  // Build voice narration
-  var oppColor = new Chess(fen).turn() === 'w' ? 'White' : 'Black';
-  var narration = buildRefutationNarration(moves, oppColor);
-
-  // Speak the narration
-  speakText(narration);
 
   // Animate each move on the board with delay
   var delay = 900;
@@ -2433,8 +2432,8 @@ async function generateReviewCommentary(category, res, bestMoveHuman, isBook) {
   const swing      = Math.abs(res.evalSwing).toFixed(2);
   const evalBefore = (res.evalBefore / 100).toFixed(2);
   const evalAfter  = (res.evalAfter  / 100).toFixed(2);
-  const bestPV     = res.topBefore?.pv ? res.topBefore.pv.split(' ').slice(0, 5).join(' ') : 'unavailable';
-  const afterPV    = res.afterLine?.pv ? res.afterLine.pv.split(' ').slice(0, 5).join(' ') : 'unavailable';
+  const bestPV     = res.topBefore?.pv ? res.topBefore.pv.slice(0, 5).join(' ') : 'unavailable';
+  const afterPV    = res.afterLine?.pv ? res.afterLine.pv.slice(0, 5).join(' ') : 'unavailable';
 
   const prompt = `You are a chess coach. Give 2–4 sentences of concrete move commentary. No filler, no "unfortunately".
 
@@ -2452,12 +2451,14 @@ Explain WHY this is ${category === 'Inaccuracy' ? 'an inaccuracy' : 'a ' + categ
 - Mention ${bestMoveHuman || 'the best move'} as the better alternative briefly.`;
 
   try {
-    const apiKey = 'YOUR_MISTRAL_API_KEY'; // Replace with env var if available
+    if (!MISTRAL_API_KEY) {
+      return staticFallback(category, res, bestMoveHuman);
+    }
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`
       },
       body: JSON.stringify({
         model: 'mistral-small-latest',
@@ -2477,9 +2478,8 @@ Explain WHY this is ${category === 'Inaccuracy' ? 'an inaccuracy' : 'a ' + categ
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content?.trim();
     return text || staticFallback(category, res, bestMoveHuman);
-
-  } catch (err) {
-    console.warn('Mistral commentary failed, using static fallback:', err);
+  } catch (e) {
+    console.error('Mistral commentary failed, using static fallback:', e);
     return staticFallback(category, res, bestMoveHuman);
   }
 }
@@ -2572,7 +2572,7 @@ function showLandmark(landmark) {
   updateLandmarkCounter();
 
   var cat = landmark.category;
-  var moodMap = { Book: 'book', Brilliant: 'brilliant', Great: 'great', Best: 'best', Blunder: 'blunder', Miss: 'inaccuracy' };
+  var moodMap = { Book: 'book', Brilliant: 'brilliant', Great: 'great', Best: 'best', Blunder: 'blunder', Mistake: 'mistake', Inaccuracy: 'inaccuracy', Miss: 'inaccuracy' };
   var mood = moodMap[cat] || 'good';
 
   // Update coach with landmark info
@@ -2603,7 +2603,7 @@ function showLandmark(landmark) {
   el.classList.remove('typing');
 
   // Show "Why this is a mistake" button for bad landmarks
-  var isBad = (cat === 'Blunder' || cat === 'Mistake' || cat === 'Miss');
+  var isBad = (cat === 'Blunder' || cat === 'Mistake' || cat === 'Inaccuracy' || cat === 'Miss');
   var lmMoveIdx = navIdx >= 0 ? navIdx : -1;
   var lmMoveData = lmMoveIdx >= 0 ? moveHistory[lmMoveIdx] : null;
   var pvAfter = lmMoveData ? (lmMoveData.pvAfter || null) : null;
@@ -2973,23 +2973,6 @@ function evalPosition(fen, depth, cb) {
   });
 }
 
-function scheduleMaiaResponse(depth, rating) {
-  var msgEl = document.getElementById('dialogueText');
-  var plain = msgEl ? msgEl.textContent || '' : '';
-  if (ttsEnabled && plain.trim()) {
-    _ttsCallback = function() { doMaiaResponse(depth, rating); };
-    // If TTS was already started by typewrite -> speakText, the onend handler
-    // will fire _ttsCallback. If no speech is in progress, fire fallback.
-    var delay = Math.max(3000, typewriteEndTime - Date.now());
-    setTimeout(function() {
-      if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
-    }, delay + 500);
-  } else {
-    var delay = Math.max(200, typewriteEndTime - Date.now());
-    setTimeout(function() { doMaiaResponse(depth, rating); }, delay);
-  }
-}
-
 function onMaiaUserMove(from, to, promotion) {
   promotion = promotion || 'q';
   // If navigated back in history, truncate history — new move becomes the latest
@@ -3034,20 +3017,38 @@ function onMaiaUserMove(from, to, promotion) {
         updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
         renderHistory();
         drawGraph();
+        // Set TTS callback BEFORE updateCoach so typewrite->speakText's onend fires it
+        _ttsCallback = function() { doMaiaResponse(depth, rating); };
         updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
+        // Safety net: if TTS never fires (disabled/error), fall back to typewrite delay
+        if (!ttsEnabled) {
+          var d = Math.max(200, typewriteEndTime - Date.now());
+          setTimeout(function() { doMaiaResponse(depth, rating); }, d);
+        } else {
+          setTimeout(function() {
+            if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
+          }, 20000);
+        }
         prevEval = afterLine;
-        // Wait for TTS to finish before Maia responds (falls back to typewrite delay if no TTS)
-        scheduleMaiaResponse(depth, rating);
       });
     } else {
       var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
       updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
       renderHistory();
       drawGraph();
+      // Set TTS callback BEFORE updateCoach so typewrite->speakText's onend fires it
+      _ttsCallback = function() { doMaiaResponse(depth, rating); };
       updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
+      // Safety net: if TTS never fires (disabled/error), fall back to typewrite delay
+      if (!ttsEnabled) {
+        var d = Math.max(200, typewriteEndTime - Date.now());
+        setTimeout(function() { doMaiaResponse(depth, rating); }, d);
+      } else {
+        setTimeout(function() {
+          if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
+        }, 20000);
+      }
       prevEval = afterLine;
-      // Wait for TTS to finish before Maia responds (falls back to typewrite delay if no TTS)
-      scheduleMaiaResponse(depth, rating);
     }
   }
 
@@ -3082,6 +3083,9 @@ function doMaiaResponse(depth, rating) {
       if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
       recordPosition(fenAfter);
       
+      // Show Maia's move on the board before finishing
+      cg.set({ fen: game.fen(), turnColor: toColor(game.turn()), movable: { color: 'none', dests: new Map() }, lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+
       // Check for draw after Maia move
       var drawCheck = checkDrawConditions(game);
       if (drawCheck.isDraw) {
@@ -3093,9 +3097,6 @@ function doMaiaResponse(depth, rating) {
         finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
         return;
       }
-
-      // Lock the board while evaluating (re-enables player's pieces after eval)
-      cg.set({ fen: game.fen(), turnColor: toColor(game.turn()), movable: { color: 'none', dests: new Map() }, lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
       navIdx = moveHistory.length;
       updateNavDisplay();
 

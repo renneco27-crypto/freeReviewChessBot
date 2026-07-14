@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import http.server, os
+import http.server, os, json, re
 
 PORT = 8080
 
@@ -29,6 +29,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self.path == '/api/config':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            api_key = ''
+            try:
+                env_path = os.path.join(os.path.dirname(__file__), '.env')
+                with open(env_path) as f:
+                    for line in f:
+                        m = re.match(r'MISTRAL_API_KEY=(.+)', line.strip())
+                        if m:
+                            api_key = m.group(1)
+                            break
+            except Exception:
+                pass
+            self.wfile.write(json.dumps({'MISTRAL_API_KEY': api_key}).encode())
+            return
         if self.is_path_forbidden():
             self.send_error(403, "Access denied")
             return
