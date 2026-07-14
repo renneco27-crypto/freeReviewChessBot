@@ -2016,6 +2016,41 @@ function finishReview(results, moves, rating) {
   isAnalysing = false;
   setEngineStatus('ready');
 
+  // CRITICAL FIX: Restore game state from results so it persists for Maia mode
+  // After reviewing a PGN, the game board position must be loaded and moveHistory
+  // must be populated with all analyzed moves. Otherwise, when user clicks "Play vs Coach"
+  // after review, the position is lost and a fresh game starts.
+  game = new Chess();
+  moveHistory = [];
+  graphMoves = [];
+  
+  // Replay all moves and rebuild moveHistory with classification data
+  for (var i = 0; i < results.length; i++) {
+    var res = results[i];
+    game.move(res.san);
+    moveHistory.push({
+      san: res.san,
+      classification: res.classification,
+      evalBefore: res.evalBefore / 100,  // convert from centipawns to pawns
+      evalAfter: res.evalAfter / 100,
+      fenBefore: res.fenBefore,
+      fenAfter: res.fenAfter,
+      bestUci: res.topBefore ? res.topBefore.move : null,
+      pvBefore: res.topBefore ? res.topBefore.pv || null : null,
+      pvAfter: res.afterLine ? res.afterLine.pv || null : null
+    });
+    graphMoves.push({
+      eval: res.evalAfter / 100,  // White-relative pawns
+      classification: res.classification,
+      moveSan: res.san,
+      ply: moveHistory.length,
+      pvAfter: res.afterLine ? res.afterLine.pv || null : null
+    });
+  }
+  
+  navIdx = moveHistory.length - 1;
+  updateNavDisplay();
+
   var r = parseInt(rating, 10);
   var thresholdBase = r < 1400 ? 2.0 : r < 1800 ? 1.5 : 1.0; // lower rating = higher threshold
 
@@ -2668,8 +2703,10 @@ function evalPosition(fen, depth, cb) {
 
 function onMaiaUserMove(from, to, promotion) {
   promotion = promotion || 'q';
-  // If navigated back, truncate history — new move becomes the latest
-  if (navIdx < moveHistory.length - 1) {
+  // If navigated back in history, truncate history — new move becomes the latest
+  // BUT: navIdx === -1 means "not navigated to any specific move" (just viewing the board)
+  // In this case, we're at the end of moveHistory, so don't truncate!
+  if (navIdx >= 0 && navIdx < moveHistory.length - 1) {
     moveHistory = moveHistory.slice(0, navIdx + 1);
     graphMoves = graphMoves.slice(0, navIdx + 1);
     maiaHistory = [];
@@ -2994,14 +3031,25 @@ document.getElementById('reviewBtn').addEventListener('click', function() {
   if (maiaMode) stopMaiaMode();
   if (isAnalysing) { coachReset('Already analysing. Please wait.'); return; }
   if (!engineReady) { coachReset('Engine still loading. Please wait.'); return; }
+  
   var pgnInput = document.getElementById('pgnInput');
+  
+  // ENHANCEMENT: Auto-generate PGN from current game if PGN field is empty
+  // This allows reviewing an unfinished Player vs Coach game without manual PGN pasting
   if (!pgnInput.value.trim() && moveHistory.length > 0) {
     var t = new Chess();
     for (var mi = 0; mi < moveHistory.length; mi++) {
       try { t.move(moveHistory[mi].san); } catch(e) {}
     }
     pgnInput.value = t.pgn();
+    coachProgress('Generated PGN from current game (' + moveHistory.length + ' moves)');
   }
+  
+  if (!pgnInput.value.trim()) {
+    coachReset('Paste a PGN first, or play a game with "Play vs Coach" and click Review Game to analyze it.');
+    return;
+  }
+  
   runGameReview();
 });
 
@@ -3063,10 +3111,30 @@ document.getElementById('prevLandmarkBtn').addEventListener('click', function() 
 });
 
 document.addEventListener('keydown', function(e) {
+  // Never fire shortcuts when user is typing
+  var tag = document.activeElement ? document.activeElement.tagName : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
   if (e.key === 'ArrowLeft') {
+    e.preventDefault();
     document.getElementById('prevMoveBtn').click();
   } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
     document.getElementById('nextMoveBtn').click();
+  } else if (e.key === 'ArrowUp') {
+    // ArrowUp → show best move suggestion
+    e.preventDefault();
+    document.getElementById('suggestBtn').click();
+  } else if (e.key === 'ArrowDown') {
+    // ArrowDown → show Lichess common moves (open/close explorer panel)
+    e.preventDefault();
+    // CRITICAL FIX: Explorer is hidden during Maia mode and shouldn't be opened
+    if (maiaMode) return;
+    var explorerParent = document.getElementById('explorerContent').parentElement;
+    if (explorerParent) {
+      explorerParent.classList.remove('explorer-hidden');
+      updateExplorer();
+    }
   }
 });
 
@@ -3094,76 +3162,55 @@ document.getElementById('explorerToggleBtn').addEventListener('click', function(
 
 // ── Play vs Coach (Maia AI) ──
 document.getElementById('coachPlayBtn').addEventListener('click', function() {
+  // Toggle off
+  if (maiaMode) {
+    stopMaiaMode();
+    coachReset('Play vs Coach ended.');
+    return;
+  }
+
+  var _self = this;
+
+  function startCoach() {
+    maiaMode = true;
+    _self.classList.add('active-coach');
+
+    // Player color = whoever has the current turn in the position.
+    // If it's white's turn → player is white; if black's turn → player is black.
+    // This handles: fresh game, loaded FEN, PGN, or mid-game board.
+    var currentTurn = game.turn(); // 'w' or 'b'
+    playerColor = (currentTurn === 'w') ? 'white' : 'black';
+
+    // Orient the board so the player sees their pieces at the bottom
+    cg.set({ orientation: playerColor, coordinates: true });
+
+    var hasExistingPosition = moveHistory.length > 0 || game.fen() !== new Chess().fen();
+    startMaiaGame(hasExistingPosition);
+
+    // Maia plays the opposite color. Check if Maia needs to move first.
+    var maiaChessTurn = (playerColor === 'white') ? 'b' : 'w';
+    if (game.turn() === maiaChessTurn) {
+      var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
+      var rating = document.getElementById('ratingSelect').value;
+      doMaiaResponse(depth, rating);
+    }
+  }
+
+  // Load Maia on-demand (first click only)
   if (!maiaReady) {
     if (typeof ort === 'undefined') {
       coachReset('onnxruntime-web not loaded yet. Please wait or check the console.');
       return;
     }
-    initMaiaSession();
-    coachReset('Loading Maia AI model (first time). Please wait...');
+    coachReset('Loading Maia AI model (first time only). Please wait...');
+    initMaiaSession().then(function() {
+      if (maiaReady) startCoach();
+      else coachReset('Maia AI failed to load. Check console.');
+    });
     return;
   }
-  maiaMode = !maiaMode;
-  if (maiaMode) {
-    this.classList.add('active-coach');
-    // Determine player color from current board orientation (set by flip button)
-    playerColor = (cg.state.orientation === 'black') ? 'black' : 'white';
-    // If there's an existing game position (from FEN load), preserve it; otherwise start fresh
-    var hasExistingPosition = moveHistory.length > 0 || game.fen() !== new Chess().fen();
-    startMaiaGame(hasExistingPosition);
-    // If player is black, Maia (white) must go first
-    if (playerColor === 'black') {
-      isAnalysing = true;
-      setEngineStatus('maia');
-      coachProgress('Maia is thinking (White)...');
-      var rating = document.getElementById('ratingSelect').value;
-      getMaiaMove(game, rating).then(function(result) {
-        if (!result) { isAnalysing = false; setEngineStatus('ready'); return; }
-        var delay = parseInt(document.getElementById('maiaDelaySlider').value, 10);
-        setTimeout(function() {
-          var fenBefore = game.fen();
-          var mr = tryParseUciMove(game, result.move);
-          if (mr) {
-            var maiaUci = mr.from + mr.to + (mr.promotion || '');
-            var fenAfter = game.fen();
-            recordPosition(fenAfter);
-            maiaHistory.push(tokenizeBoard(game));
-            if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
-            
-            // Check for draw after Maia's opening move
-            var drawCheck = checkDrawConditions(game);
-            if (drawCheck.isDraw) {
-              finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
-              return;
-            }
-            
-            // Evaluate Maia's opening move
-            var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
-            evalPosition(fenAfter, depth, function(afterLine) {
-              var isBlackTurn = game.turn() === 'b';
-              var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-              updateEvalDisplay(r.evAfter * 100);
-              navIdx = moveHistory.length - 1;
-              renderHistory();
-              drawGraph();
-              prevEval = afterLine;
-              updateBoard();
-              cg.set({ lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
-              coachProgress('Maia played <span class="accent">' + mr.san + '</span>. Your turn as Black.');
-              isAnalysing = false;
-              setEngineStatus('ready');
-            });
-          } else {
-            isAnalysing = false;
-            setEngineStatus('ready');
-          }
-        }, delay);
-      });
-    }
-  } else {
-    stopMaiaMode();
-    coachReset('Play vs Coach ended.');
-  }
+
+  startCoach();
 });
 
 // ── Suggest Best Move ──
@@ -3341,9 +3388,6 @@ if (!document.getElementById('apiToken').value) {
 
 initEngine();
 initBoard();
-coachReset('Ready when you are. Make a move or paste a PGN to review a game.');
+coachReset('Welcome! Options: (1) Paste a PGN and click "Review Game", (2) Click "Play vs Coach" to play Maia AI, then click "Review Game" to analyze your game, or (3) Load a FEN position and analyze it.');
 
-// Lazy-init Maia AI (give engine time to load first)
-setTimeout(function() {
-  if (typeof ort !== 'undefined') initMaiaSession();
-}, 1000);
+// Maia AI loads on-demand when user clicks "Play vs Coach" (see coachPlayBtn handler)
