@@ -2070,7 +2070,7 @@ function runGameReview() {
   }
 }
 
-function finishReview(results, moves, rating) {
+async function finishReview(results, moves, rating) {
   isAnalysing = false;
   setEngineStatus('ready');
 
