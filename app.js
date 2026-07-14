@@ -29,6 +29,50 @@ var CLASS_META = {
   forced:{label:'Forced',icon:'\u25C1'},
   book:{label:'Book Move',icon:'\u25C7'}
 };
+var ROAST_MSGS = {
+  blunder: [
+    'You picked the worst move in the position. Never play chess again.',
+    'Are you blind? You literally just threw the game away in one move.',
+    'Why would you ever think that was playable? Just quit.',
+    'You just gave them a free win because you couldn\'t be bothered to look at the board.',
+    'That is an embarrassing move. Delete your account.'
+  ],
+  mistake: [
+    'What a garbage move. You\'re just giving them the advantage for free.',
+    'You had a completely fine position and you ruined it.',
+    'Stop moving so fast. You clearly didn\'t think about that for a single second.',
+    'You completely missed their idea. Get ready to lose.',
+    'That move does absolutely nothing. You\'re completely lost now.'
+  ],
+  inaccuracy: [
+    'That was incredibly lazy. Play a better move next time.',
+    'Why are you playing so passive? Have some backbone.',
+    'You missed a completely free win because you took the easy way out.',
+    'That move makes no sense. What are you even trying to accomplish?',
+    'You are letting them back into the game with stupid moves like that.'
+  ],
+  good: [
+    'Fine. You didn\'t choke yet.',
+    'A basic move. Anyone could have found that.',
+    'It\'s legal, I guess. Keep going.',
+    'Nothing special. Don\'t mess up the next one.',
+    'You managed not to hang a piece. Congratulations.'
+  ],
+  excellent: [
+    'Surprisingly decent. Let\'s see if you can keep it up.',
+    'Okay, you actually used your brain for once.',
+    'Good move. Don\'t get overconfident, you\'re still bad.',
+    'A solid line. Try to make your next move look just as intentional.',
+    'That actually works. Did you click that square by accident?'
+  ],
+  best: [
+    'The exact best move. Enjoy it, it won\'t happen again.',
+    'Perfect calculation. For a second, you didn\'t look completely hopeless.',
+    'The only winning move on the board and you found it. Shocking.',
+    'Top engine choice. You must be cheating.',
+    'Flawless. Finally, a move that doesn\'t make me want to shut down.'
+  ]
+};
 var MOUTH = {
   blunder:'M90,94 Q100,86 110,94', mistake:'M90,93 Q100,89 110,93',
   inaccuracy:'M91,92 L109,92', good:'M90,90 Q100,94 110,90',
@@ -431,7 +475,17 @@ function updateCoach(data) {
     whyBtn.style.display = isBad && data.pvAfter ? 'inline-block' : 'none';
     document.getElementById('refutationDisplay').innerHTML = '';
   }
-  var html = data.customMsg || pickMsg(cls, data.moveSan, data.currentEval, data.evalSwing, data.isWhiteToMove);
+  var html;
+  if (maiaMode) {
+    var pool = ROAST_MSGS[cls] || ROAST_MSGS.good;
+    html = pool[Math.floor(Math.random() * pool.length)];
+    if (data.moveSan) {
+      var label = '<span class="accent">' + data.moveSan.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+      html = label + ' — ' + html;
+    }
+  } else {
+    html = data.customMsg || pickMsg(cls, data.moveSan, data.currentEval, data.evalSwing, data.isWhiteToMove);
+  }
   typewrite(html);
 }
 
@@ -2106,6 +2160,8 @@ function finishReview(results, moves, rating) {
         bestMoveHuman = moveResult ? moveResult.san : bestMoveSan;
       }
 
+      var commentary = await generateReviewCommentary(landmarkCategory, res, bestMoveHuman, isBook);
+
       landmarks.push({
         moveNumber: res.moveNumber,
         color: res.color,
@@ -2113,7 +2169,7 @@ function finishReview(results, moves, rating) {
         category: isBook ? 'Book' : landmarkCategory,
         evalSwing: evalSwingPawns,
         evalAfter: res.evalAfter / 100,
-        commentary: generateReviewCommentary(landmarkCategory, res, bestMoveHuman, isBook)
+        commentary: commentary
       });
     }
   }
@@ -2202,18 +2258,210 @@ function finishReview(results, moves, rating) {
   startLandmarkPlayback();
 }
 
-function generateReviewCommentary(category, res, bestMoveHuman, isBook) {
+function analyzePositionalFactors(res) {
+  const before = new Chess(res.fenBefore);
+  const after  = new Chess(res.fenAfter);
+  const color  = res.color === 'White' ? 'w' : 'b';
+  const opp    = color === 'w' ? 'b' : 'w';
+  const oppName = res.color === 'White' ? 'Black' : 'White';
+  const files  = ['a','b','c','d','e','f','g','h'];
+  const facts  = [];
+
+  function pawnsOnFile(game, file, c) {
+    return [1,2,3,4,5,6,7,8].some(r => {
+      const p = game.get(file + r);
+      return p && p.type === 'p' && p.color === c;
+    });
+  }
+
+  function rookOrQueenOnFile(game, file, c) {
+    return [1,2,3,4,5,6,7,8].some(r => {
+      const p = game.get(file + r);
+      return p && (p.type === 'r' || p.type === 'q') && p.color === c;
+    });
+  }
+
+  files.forEach(file => {
+    const hadOwnPawn = pawnsOnFile(before, file, color);
+    const hadOppPawn = pawnsOnFile(before, file, opp);
+    const nowOwnPawn = pawnsOnFile(after,  file, color);
+    const nowOppPawn = pawnsOnFile(after,  file, opp);
+
+    if (hadOwnPawn && !nowOwnPawn && !nowOppPawn && rookOrQueenOnFile(after, file, opp)) {
+      facts.push(`fully opens the ${file}-file for ${oppName}'s rook`);
+    } else if (!hadOppPawn && !nowOppPawn && hadOwnPawn && !nowOwnPawn) {
+      facts.push(`opens the ${file}-file`);
+    } else if (hadOppPawn && !nowOppPawn && rookOrQueenOnFile(after, file, opp)) {
+      facts.push(`gives ${oppName} a half-open ${file}-file with a rook already aimed down it`);
+    }
+  });
+
+  function doubledFiles(game, c) {
+    return files.filter(f => {
+      const count = [1,2,3,4,5,6,7,8].filter(r => {
+        const p = game.get(f + r);
+        return p && p.type === 'p' && p.color === c;
+      }).length;
+      return count > 1;
+    });
+  }
+
+  const newDoubled = doubledFiles(after, color).filter(f => !doubledFiles(before, color).includes(f));
+  if (newDoubled.length) {
+    facts.push(`creates doubled pawns on the ${newDoubled.join('- and ')}-file${newDoubled.length > 1 ? 's' : ''}`);
+  }
+
+  function isolatedFiles(game, c) {
+    const present = {};
+    files.forEach(f => { present[f] = false; });
+    [1,2,3,4,5,6,7,8].forEach(r => {
+      files.forEach(f => {
+        const p = game.get(f + r);
+        if (p && p.type === 'p' && p.color === c) present[f] = true;
+      });
+    });
+    return files.filter((f, i) => {
+      if (!present[f]) return false;
+      return !present[files[i - 1]] && !present[files[i + 1]];
+    });
+  }
+
+  const newIsolated = isolatedFiles(after, color).filter(f => !isolatedFiles(before, color).includes(f));
+  if (newIsolated.length) {
+    facts.push(`leaves an isolated pawn on the ${newIsolated.join('- and ')}-file${newIsolated.length > 1 ? 's' : ''}`);
+  }
+
+  function isOutpost(game, sq, forColor) {
+    const p = game.get(sq);
+    if (!p || !['n','b'].includes(p.type) || p.color !== forColor) return false;
+    const fi   = files.indexOf(sq[0]);
+    const rank = parseInt(sq[1]);
+    const pawnRanks = forColor === 'w' ? [rank - 1] : [rank + 1];
+    const adjFiles  = [files[fi - 1], files[fi + 1]].filter(Boolean);
+    return !adjFiles.some(af =>
+      pawnRanks.some(pr => {
+        if (pr < 1 || pr > 8) return false;
+        const ep = game.get(af + pr);
+        return ep && ep.type === 'p' && ep.color !== forColor;
+      })
+    );
+  }
+
+  files.forEach(f => {
+    [1,2,3,4,5,6,7,8].forEach(r => {
+      const sq = f + r;
+      if (!isOutpost(before, sq, opp) && isOutpost(after, sq, opp)) {
+        const p = after.get(sq);
+        if (p) facts.push(`gives ${oppName} an outpost ${p.type === 'n' ? 'knight' : 'bishop'} on ${sq}`);
+      }
+    });
+  });
+
+  function shieldCount(game, c) {
+    let kingSq = null;
+    files.forEach(f => [1,2,3,4,5,6,7,8].forEach(r => {
+      const p = game.get(f + r);
+      if (p && p.type === 'k' && p.color === c) kingSq = f + r;
+    }));
+    if (!kingSq) return 0;
+    const kf = files.indexOf(kingSq[0]);
+    const kr = parseInt(kingSq[1]);
+    const shieldRank = c === 'w' ? kr + 1 : kr - 1;
+    if (shieldRank < 1 || shieldRank > 8) return 0;
+    return [-1,0,1].filter(df => {
+      const sf = files[kf + df];
+      if (!sf) return false;
+      const p = game.get(sf + shieldRank);
+      return p && p.type === 'p' && p.color === c;
+    }).length;
+  }
+
+  const shieldBefore = shieldCount(before, color);
+  const shieldAfter  = shieldCount(after,  color);
+  if (shieldAfter < shieldBefore) {
+    facts.push(`weakens the ${res.color.toLowerCase()} king's pawn shield (${shieldBefore} → ${shieldAfter} cover pawns)`);
+  }
+
+  return facts;
+}
+
+function staticFallback(category, res, bestMoveHuman) {
+  var templates = REVIEW_COMMENTARY[category] || ['{move} is a notable moment in the game.'];
+  var msg = templates[Math.floor(Math.random() * templates.length)];
+  msg = msg.replace(/\{move\}/g, res.san);
+  if (['Miss','Mistake','Inaccuracy'].includes(category) && bestMoveHuman) {
+    msg = msg.replace(/\{bestResponse\}/g, bestMoveHuman);
+  }
+  return msg;
+}
+
+async function generateReviewCommentary(category, res, bestMoveHuman, isBook) {
   if (isBook && category === 'Book') {
     return res.san + ' is a standard book move. Solid opening play.';
   }
 
-  var templates = REVIEW_COMMENTARY[category] || ['{move} is a notable moment in the game.'];
-  var msg = templates[Math.floor(Math.random() * templates.length)];
-  msg = msg.replace(/\{move\}/g, res.san);
-  if (category === 'Miss' && bestMoveHuman) {
-    msg = msg.replace(/\{bestResponse\}/g, bestMoveHuman);
+  const AI_CATEGORIES = ['Inaccuracy', 'Mistake', 'Blunder', 'Miss', 'Great', 'Brilliant'];
+  if (!AI_CATEGORIES.includes(category)) {
+    return staticFallback(category, res, bestMoveHuman);
   }
-  return msg;
+
+  const positionalFacts = analyzePositionalFactors(res);
+  const positionalBlock = positionalFacts.length
+    ? 'Concrete positional consequences:\n' + positionalFacts.map(f => '- ' + f).join('\n')
+    : 'No major structural changes — focus on tempo and eval swing.';
+
+  const swing      = Math.abs(res.evalSwing).toFixed(2);
+  const evalBefore = (res.evalBefore / 100).toFixed(2);
+  const evalAfter  = (res.evalAfter  / 100).toFixed(2);
+  const bestPV     = res.topBefore?.pv ? res.topBefore.pv.split(' ').slice(0, 5).join(' ') : 'unavailable';
+  const afterPV    = res.afterLine?.pv ? res.afterLine.pv.split(' ').slice(0, 5).join(' ') : 'unavailable';
+
+  const prompt = `You are a chess coach. Give 2–4 sentences of concrete move commentary. No filler, no "unfortunately".
+
+Move: ${res.san} (${res.color}, move ${res.moveNumber})
+Category: ${category}
+Eval before: ${evalBefore} | Eval after: ${evalAfter} | Swing: ${swing} pawns
+Best move: ${bestMoveHuman || 'unknown'} | Best PV: ${bestPV}
+Actual PV after played move: ${afterPV}
+
+${positionalBlock}
+
+Explain WHY this is ${category === 'Inaccuracy' ? 'an inaccuracy' : 'a ' + category.toLowerCase()}.
+- Lead with the most concrete positional fact above (open file, weak pawn, outpost, king safety).
+- If swing ≥ 0.8, say a pawn is at risk or will eventually be lost.
+- Mention ${bestMoveHuman || 'the best move'} as the better alternative briefly.`;
+
+  try {
+    const apiKey = 'YOUR_MISTRAL_API_KEY'; // Replace with env var if available
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'mistral-small-latest',
+        max_tokens: 180,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a chess coach. Be direct and concrete. Never restate the move name more than once. Never start with "I".'
+          },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) throw new Error('Mistral error ' + response.status);
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content?.trim();
+    return text || staticFallback(category, res, bestMoveHuman);
+
+  } catch (err) {
+    console.warn('Mistral commentary failed, using static fallback:', err);
+    return staticFallback(category, res, bestMoveHuman);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3089,7 +3337,14 @@ document.getElementById('nextLandmarkBtn').addEventListener('click', function() 
   if (playbackTimer) clearTimeout(playbackTimer);
   playbackTimer = null;
   playbackCancelled = false;
-  advanceToLandmark(reviewData.currentLandmark + 1);
+  var nextIdx = reviewData.currentLandmark + 1;
+  if (nextIdx >= reviewData.landmarks.length) {
+    document.getElementById('landmarkNavRow').style.display = 'none';
+    reviewPhase = 'takeaway';
+    showTakeaway();
+  } else {
+    advanceToLandmark(nextIdx);
+  }
 });
 document.getElementById('prevLandmarkBtn').addEventListener('click', function() {
   console.log('prevLandmarkBtn clicked', { reviewData: !!reviewData, playbackTimer: !!playbackTimer, currentPly: game.history().length, landmarks: reviewData ? reviewData.landmarks.length : null });
