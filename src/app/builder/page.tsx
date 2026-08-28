@@ -132,12 +132,7 @@ export default function BuilderPage() {
             {progress > 0 && progress < 100 && evaluatingFen ? (
               <div className="w-[400px] h-[400px] shadow-2xl rounded-sm border-4 border-gray-800 dark:border-gray-700">
                 <Chessboard 
-                  id="builder-board" 
-                  position={evaluatingFen} 
-                  arePiecesDraggable={false} 
-                  animationDuration={300} 
-                  // @ts-ignore
-                  options={{ position: evaluatingFen, allowDragging: false, animationDurationInMs: 300 }} 
+                  options={{ id: 'builder-board', position: evaluatingFen, allowDragging: false, animationDurationInMs: 300 }} 
                 />
               </div>
             ) : (

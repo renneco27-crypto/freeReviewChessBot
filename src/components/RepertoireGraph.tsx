@@ -23,9 +23,6 @@ const CustomNode = ({ data }: any) => {
       <div className="text-xs text-gray-500 dark:text-gray-400">{data.source === 'root' ? 'Start' : data.source === 'maia' ? 'Maia' : 'Stockfish'}</div>
       <div className="w-24 h-24 mt-2 pointer-events-none">
          <Chessboard 
-           position={data.fen} 
-           arePiecesDraggable={false} 
-           // @ts-ignore
            options={{ position: data.fen, allowDragging: false }} 
          />
       </div>
