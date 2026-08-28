@@ -6,12 +6,14 @@ import { parseGamesToTree } from '@/lib/repertoire';
 import { BuilderNode, buildRepertoireTree } from '@/lib/builder';
 import { useEngine } from '@/hooks/useEngine';
 import RepertoireGraph from '@/components/RepertoireGraph';
+import { Chessboard } from 'react-chessboard';
 
 export default function BuilderPage() {
   const [username, setUsername] = useState('');
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0);
   const [tree, setTree] = useState<BuilderNode | null>(null);
+  const [evaluatingFen, setEvaluatingFen] = useState<string | null>(null);
   const { isReady, evaluatePosition } = useEngine();
 
   const handleGenerate = async () => {
@@ -57,11 +59,12 @@ export default function BuilderPage() {
         'w', // Assuming the user is playing white for this repertoire
         15,
         evaluatePosition,
-        (completed, total) => {
+        (completed, total, currentFen) => {
           // Progress roughly starts at 15%, goes up to 100%
           const percentage = 15 + Math.floor((completed / Math.max(150, total)) * 85);
           setProgress(Math.min(100, percentage));
           setStatus(`Evaluating positions: ${completed} / ~${Math.max(150, total)}`);
+          if (currentFen) setEvaluatingFen(currentFen);
         }
       );
       
@@ -125,8 +128,15 @@ export default function BuilderPage() {
         {tree ? (
           <RepertoireGraph root={tree} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-            {progress > 0 ? 'Building visualizer...' : 'Enter a username to begin.'}
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-950">
+            {progress > 0 && progress < 100 && evaluatingFen ? (
+              <div className="w-[400px] h-[400px] shadow-2xl rounded-sm border-4 border-gray-800 dark:border-gray-700">
+                {/* @ts-ignore */}
+                <Chessboard position={evaluatingFen} arePiecesDraggable={false} animationDuration={100} />
+              </div>
+            ) : (
+              <span>{progress > 0 ? 'Building visualizer...' : 'Enter a username to begin.'}</span>
+            )}
           </div>
         )}
       </div>
