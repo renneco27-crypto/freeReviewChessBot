@@ -72,11 +72,17 @@ export async function buildRepertoireTree(
 
   let firstOpponentTurnSeen = false;
 
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
   const processQueue = async () => {
     while (queue.length > 0) {
-      const { node, plyToProcess } = queue.shift()!;
+      // Use pop() for Depth-First Search! This keeps moves consecutive so the chessboard can animate them sliding.
+      const { node, plyToProcess } = queue.pop()!;
       completedNodes++;
+      
+      // Show the base position before calculating
       onProgress(completedNodes, totalNodes, node.fen);
+      await delay(250);
 
       if (plyToProcess <= 0) continue;
 
@@ -104,13 +110,16 @@ export async function buildRepertoireTree(
             node.children.push(childNode);
             totalNodes++;
             queue.push({ node: childNode, plyToProcess: plyToProcess - 1 });
+            
+            // visually demonstrate the move being played
+            onProgress(completedNodes, totalNodes, childNode.fen);
+            await delay(400); // pause to let the piece slide
           } catch(e) {
             console.error("Invalid stockfish move:", uciMove);
           }
         }
       } else {
         // Opponent turn: Maia gets 5 moves if it's the first split, else 1
-        // We'll mark the first split if the root node has no children OR if this is the first time we query Maia.
         const isFirstSplit = !firstOpponentTurnSeen;
         firstOpponentTurnSeen = true;
 
@@ -126,7 +135,8 @@ export async function buildRepertoireTree(
           
           const moves = data.moves || [];
           
-          for (const m of moves) {
+          for (let i = 0; i < moves.length; i++) {
+            const m = moves[i];
             const tempChess = new Chess(node.fen);
             const uciMove = m.move;
             const from = uciMove.substring(0, 2);
@@ -147,6 +157,16 @@ export async function buildRepertoireTree(
               node.children.push(childNode);
               totalNodes++;
               queue.push({ node: childNode, plyToProcess: plyToProcess - 1 });
+              
+              // Show the move visually on the board
+              onProgress(completedNodes, totalNodes, childNode.fen);
+              await delay(400); // Wait for the animation to play
+              
+              // Reset board back to the base node if we still have more multipv branches to show
+              if (i < moves.length - 1) {
+                onProgress(completedNodes, totalNodes, node.fen);
+                await delay(200);
+              }
             } catch(e) {
               console.error("Invalid maia move:", uciMove);
             }
@@ -155,8 +175,6 @@ export async function buildRepertoireTree(
           console.error("Maia API error", e);
         }
       }
-      
-      onProgress(completedNodes, totalNodes, node.fen);
     }
   };
 
