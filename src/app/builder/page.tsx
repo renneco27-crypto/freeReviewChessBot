@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { fetchChesscomGames } from '@/lib/api';
 import { parseGamesToTree } from '@/lib/repertoire';
 import { BuilderNode, buildRepertoireTree } from '@/lib/builder';
@@ -60,11 +61,14 @@ export default function BuilderPage() {
         15,
         evaluatePosition,
         (completed, total, currentFen) => {
-          // Progress roughly starts at 15%, goes up to 100%
-          const percentage = 15 + Math.floor((completed / Math.max(150, total)) * 85);
-          setProgress(Math.min(100, percentage));
-          setStatus(`Evaluating positions: ${completed} / ~${Math.max(150, total)}`);
-          if (currentFen) setEvaluatingFen(currentFen);
+          // flushSync forces React to flush state immediately instead of batching,
+          // so the chessboard visually updates piece-by-piece before the delay
+          flushSync(() => {
+            const percentage = 15 + Math.floor((completed / Math.max(150, total)) * 85);
+            setProgress(Math.min(100, percentage));
+            setStatus(`Evaluating positions: ${completed} / ~${Math.max(150, total)}`);
+            if (currentFen) setEvaluatingFen(currentFen);
+          });
         }
       );
       
