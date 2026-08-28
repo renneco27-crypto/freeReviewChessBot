@@ -131,8 +131,14 @@ export default function BuilderPage() {
           <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-950">
             {progress > 0 && progress < 100 && evaluatingFen ? (
               <div className="w-[400px] h-[400px] shadow-2xl rounded-sm border-4 border-gray-800 dark:border-gray-700">
-                {/* @ts-ignore */}
-                <Chessboard id="builder-board" position={evaluatingFen} arePiecesDraggable={false} animationDuration={300} />
+                <Chessboard 
+                  id="builder-board" 
+                  position={evaluatingFen} 
+                  arePiecesDraggable={false} 
+                  animationDuration={300} 
+                  // @ts-ignore
+                  options={{ position: evaluatingFen, allowDragging: false, animationDurationInMs: 300 }} 
+                />
               </div>
             ) : (
               <span>{progress > 0 ? 'Building visualizer...' : 'Enter a username to begin.'}</span>

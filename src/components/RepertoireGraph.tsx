@@ -22,8 +22,12 @@ const CustomNode = ({ data }: any) => {
       <div className="font-bold text-lg dark:text-white">{data.label}</div>
       <div className="text-xs text-gray-500 dark:text-gray-400">{data.source === 'root' ? 'Start' : data.source === 'maia' ? 'Maia' : 'Stockfish'}</div>
       <div className="w-24 h-24 mt-2 pointer-events-none">
-         {/* @ts-ignore */}
-         <Chessboard position={data.fen} arePiecesDraggable={false} />
+         <Chessboard 
+           position={data.fen} 
+           arePiecesDraggable={false} 
+           // @ts-ignore
+           options={{ position: data.fen, allowDragging: false }} 
+         />
       </div>
     </div>
   );
