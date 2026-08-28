@@ -16,12 +16,13 @@ import { Chessboard } from 'react-chessboard';
 
 const CustomNode = ({ data }: any) => {
   return (
-    <div className={`px-4 py-2 shadow-md rounded-md bg-white border-2 flex flex-col items-center
-      ${data.source === 'maia' ? 'border-blue-500' : data.source === 'stockfish' ? 'border-green-500' : 'border-gray-800'}
+    <div className={`px-4 py-2 shadow-md rounded-md bg-white dark:bg-gray-800 border-2 flex flex-col items-center
+      ${data.source === 'maia' ? 'border-blue-500' : data.source === 'stockfish' ? 'border-green-500' : 'border-gray-800 dark:border-gray-600'}
     `}>
-      <div className="font-bold text-lg">{data.label}</div>
-      <div className="text-xs text-gray-500">{data.source === 'root' ? 'Start' : data.source === 'maia' ? 'Maia' : 'Stockfish'}</div>
+      <div className="font-bold text-lg dark:text-white">{data.label}</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">{data.source === 'root' ? 'Start' : data.source === 'maia' ? 'Maia' : 'Stockfish'}</div>
       <div className="w-24 h-24 mt-2 pointer-events-none">
+         {/* @ts-ignore */}
          <Chessboard position={data.fen} arePiecesDraggable={false} />
       </div>
     </div>

@@ -79,18 +79,18 @@ export default function BuilderPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       {/* Header */}
-      <div className="bg-white p-4 shadow-sm z-10 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white dark:bg-gray-900 p-4 shadow-sm z-10 flex flex-col md:flex-row items-center justify-between gap-4 border-b dark:border-gray-800">
         <div>
           <h1 className="text-2xl font-bold">Automated Repertoire Builder</h1>
-          <p className="text-sm text-gray-500">Maia & Stockfish Engine Pipeline</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Maia & Stockfish Engine Pipeline</p>
         </div>
         
         <div className="flex items-center gap-4 w-full md:w-auto">
           <input
             type="text"
-            className="border p-2 rounded-md w-full md:w-64"
+            className="border dark:border-gray-700 bg-transparent p-2 rounded-md w-full md:w-64"
             placeholder="Chess.com Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -116,7 +116,7 @@ export default function BuilderPage() {
       )}
       
       {/* Status bar */}
-      <div className="bg-white px-4 py-2 border-b text-sm font-medium text-gray-700">
+      <div className="bg-white dark:bg-gray-900 px-4 py-2 border-b dark:border-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300">
         Status: {isReady ? status || 'Waiting for input...' : 'Loading Stockfish WebAssembly...'}
       </div>
       

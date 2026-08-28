@@ -10,7 +10,7 @@ export type BuilderNode = {
   children: BuilderNode[];
 };
 
-export type ProgressCallback = (completed: number, total: number) => void;
+export type ProgressCallback = (completed: number, total: number, currentFen?: string) => void;
 
 export async function buildRepertoireTree(
   rootFen: string,
@@ -76,7 +76,7 @@ export async function buildRepertoireTree(
     while (queue.length > 0) {
       const { node, plyToProcess } = queue.shift()!;
       completedNodes++;
-      onProgress(completedNodes, totalNodes);
+      onProgress(completedNodes, totalNodes, node.fen);
 
       if (plyToProcess <= 0) continue;
 
@@ -156,7 +156,7 @@ export async function buildRepertoireTree(
         }
       }
       
-      onProgress(completedNodes, totalNodes);
+      onProgress(completedNodes, totalNodes, node.fen);
     }
   };
 
