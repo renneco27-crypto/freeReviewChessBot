@@ -17,7 +17,8 @@ export async function buildRepertoireTree(
   userColor: 'w' | 'b',
   maxFullMoves: number,
   evaluateStockfish: (fen: string) => Promise<string>,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  abortSignal?: { current: boolean } | { aborted: boolean }
 ): Promise<BuilderNode> {
   const rootChess = new Chess(rootFen);
   
@@ -74,8 +75,16 @@ export async function buildRepertoireTree(
 
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+  const isAborted = () => {
+    if (!abortSignal) return false;
+    return 'current' in abortSignal ? abortSignal.current : abortSignal.aborted;
+  };
+
   const processQueue = async () => {
     while (queue.length > 0) {
+      // Stop generation if aborted
+      if (isAborted()) break;
+
       // Use pop() for Depth-First Search! This keeps moves consecutive so the chessboard can animate them sliding.
       const { node, plyToProcess } = queue.pop()!;
       completedNodes++;

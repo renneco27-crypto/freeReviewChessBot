@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchChesscomGames } from '@/lib/api';
 import { parseGamesToTree } from '@/lib/repertoire';
@@ -19,6 +19,7 @@ export default function BuilderPage() {
   const [evaluatingFen, setEvaluatingFen] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const { isReady, evaluatePosition } = useEngine();
+  const abortRef = useRef(false);
 
   // Load saved tree from localStorage on mount
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function BuilderPage() {
 
   const handleGenerate = async () => {
     if (!username) return;
+    abortRef.current = false;
     setStatus('Fetching games from Chess.com...');
     setProgress(5);
     
@@ -89,7 +91,8 @@ export default function BuilderPage() {
             setStatus(`Evaluating positions: ${completed} / ~${Math.max(150, total)}`);
             if (currentFen) setEvaluatingFen(currentFen);
           });
-        }
+        },
+        abortRef
       );
       
       // Update root node label to the actual opening move instead of "Root"
@@ -107,6 +110,11 @@ export default function BuilderPage() {
       console.error(e);
       setStatus(`Error: ${e.message}`);
     }
+  };
+
+  const handleStop = () => {
+    abortRef.current = true;
+    setStatus('Stopping generation and saving progress...');
   };
 
   const handleSave = () => {
@@ -140,6 +148,8 @@ export default function BuilderPage() {
     }
   };
 
+  const isGenerating = progress > 0 && progress < 100;
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       {/* Header */}
@@ -156,15 +166,25 @@ export default function BuilderPage() {
             placeholder="Chess.com Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            disabled={isGenerating}
           />
-          <button
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md whitespace-nowrap font-medium disabled:opacity-50"
-            onClick={handleGenerate}
-            disabled={!isReady || !username || (progress > 0 && progress < 100)}
-          >
-            {progress > 0 && progress < 100 ? 'Generating...' : 'Build Repertoire'}
-          </button>
-          {tree && (
+          {isGenerating ? (
+            <button
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md whitespace-nowrap font-medium animate-pulse"
+              onClick={handleStop}
+            >
+              ⏹ Stop & Save Progress
+            </button>
+          ) : (
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md whitespace-nowrap font-medium disabled:opacity-50"
+              onClick={handleGenerate}
+              disabled={!isReady || !username}
+            >
+              Build Repertoire
+            </button>
+          )}
+          {tree && !isGenerating && (
             <>
               <button
                 className={`px-4 py-2 rounded-md whitespace-nowrap font-medium border ${isSaved ? 'border-green-500 text-green-600' : 'border-yellow-500 text-yellow-600 animate-pulse'}`}
