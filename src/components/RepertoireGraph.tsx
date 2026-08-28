@@ -16,9 +16,17 @@ import { Chessboard } from 'react-chessboard';
 
 const CustomNode = ({ data }: any) => {
   return (
-    <div className={`px-4 py-2 shadow-md rounded-md bg-white dark:bg-gray-800 border-2 flex flex-col items-center
+    <div className={`px-4 py-2 shadow-md rounded-md bg-white dark:bg-gray-800 border-2 flex flex-col items-center relative
       ${data.source === 'maia' ? 'border-blue-500' : data.source === 'stockfish' ? 'border-green-500' : 'border-gray-800 dark:border-gray-600'}
     `}>
+      {/* Delete button */}
+      {data.onDeleteNode && data.source !== 'root' && (
+        <button
+          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs font-bold leading-none flex items-center justify-center z-10"
+          onClick={() => data.onDeleteNode(data.id)}
+          title="Delete this branch"
+        >×</button>
+      )}
       <div className="font-bold text-lg dark:text-white">{data.label}</div>
       <div className="text-xs text-gray-500 dark:text-gray-400">{data.source === 'root' ? 'Start' : data.source === 'maia' ? 'Maia' : 'Stockfish'}</div>
       <div className="w-24 h-24 mt-2 pointer-events-none">
@@ -34,7 +42,7 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-export default function RepertoireGraph({ root }: { root: BuilderNode }) {
+export default function RepertoireGraph({ root, onDeleteNode }: { root: BuilderNode, onDeleteNode?: (id: string) => void }) {
   const { initialNodes, initialEdges } = useMemo(() => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
@@ -53,7 +61,9 @@ export default function RepertoireGraph({ root }: { root: BuilderNode }) {
         data: { 
           label: node.moveSan, 
           source: node.source,
-          fen: node.fen 
+          fen: node.fen,
+          id: node.id,
+          onDeleteNode,
         },
       });
       

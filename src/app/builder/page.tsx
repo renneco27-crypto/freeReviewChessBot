@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchChesscomGames } from '@/lib/api';
 import { parseGamesToTree } from '@/lib/repertoire';
@@ -9,13 +9,33 @@ import { useEngine } from '@/hooks/useEngine';
 import RepertoireGraph from '@/components/RepertoireGraph';
 import { Chessboard } from 'react-chessboard';
 
+const STORAGE_KEY = 'repertoire_tree_v1';
+
 export default function BuilderPage() {
   const [username, setUsername] = useState('');
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0);
   const [tree, setTree] = useState<BuilderNode | null>(null);
   const [evaluatingFen, setEvaluatingFen] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   const { isReady, evaluatePosition } = useEngine();
+
+  // Load saved tree from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setTree(parsed.tree);
+        setUsername(parsed.username || '');
+        setStatus('Loaded saved repertoire from cache.');
+        setProgress(100);
+        setIsSaved(true);
+      }
+    } catch (e) {
+      console.error('Failed to load saved tree', e);
+    }
+  }, []);
 
   const handleGenerate = async () => {
     if (!username) return;
@@ -76,12 +96,47 @@ export default function BuilderPage() {
       generatedTree.moveSan = rootOpening.san;
       
       setTree(generatedTree);
-      setStatus('Repertoire generated successfully!');
+      // Auto-save to localStorage immediately
+      const saveData = { tree: generatedTree, username, savedAt: new Date().toISOString() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+      setIsSaved(true);
+      setStatus('Repertoire generated and saved!');
       setProgress(100);
       
     } catch (e: any) {
       console.error(e);
       setStatus(`Error: ${e.message}`);
+    }
+  };
+
+  const handleSave = () => {
+    if (!tree) return;
+    const saveData = { tree, username, savedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+    setIsSaved(true);
+    setStatus('Repertoire saved!');
+  };
+
+  const handleClear = () => {
+    if (!confirm('Clear the saved repertoire? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    setTree(null);
+    setProgress(0);
+    setIsSaved(false);
+    setStatus('');
+  };
+
+  const handleDeleteNode = (nodeId: string) => {
+    if (!tree) return;
+    // Recursively remove the node from the tree
+    const removeNode = (node: BuilderNode): BuilderNode | null => {
+      if (node.id === nodeId) return null;
+      return { ...node, children: node.children.map(removeNode).filter(Boolean) as BuilderNode[] };
+    };
+    const updatedTree = removeNode(tree);
+    if (updatedTree) {
+      setTree(updatedTree);
+      setIsSaved(false); // Mark as unsaved after edits
     }
   };
 
@@ -94,21 +149,37 @@ export default function BuilderPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Maia & Stockfish Engine Pipeline</p>
         </div>
         
-        <div className="flex items-center gap-4 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
           <input
             type="text"
-            className="border dark:border-gray-700 bg-transparent p-2 rounded-md w-full md:w-64"
+            className="border dark:border-gray-700 bg-transparent p-2 rounded-md w-full md:w-48"
             placeholder="Chess.com Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
           <button
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md whitespace-nowrap font-medium disabled:opacity-50"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md whitespace-nowrap font-medium disabled:opacity-50"
             onClick={handleGenerate}
             disabled={!isReady || !username || (progress > 0 && progress < 100)}
           >
             {progress > 0 && progress < 100 ? 'Generating...' : 'Build Repertoire'}
           </button>
+          {tree && (
+            <>
+              <button
+                className={`px-4 py-2 rounded-md whitespace-nowrap font-medium border ${isSaved ? 'border-green-500 text-green-600' : 'border-yellow-500 text-yellow-600 animate-pulse'}`}
+                onClick={handleSave}
+              >
+                {isSaved ? '✓ Saved' : '💾 Save Changes'}
+              </button>
+              <button
+                className="px-4 py-2 rounded-md whitespace-nowrap font-medium border border-red-400 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                onClick={handleClear}
+              >
+                🗑 Clear
+              </button>
+            </>
+          )}
         </div>
       </div>
       
@@ -130,7 +201,7 @@ export default function BuilderPage() {
       {/* Graph Area */}
       <div className="flex-1 overflow-hidden relative">
         {tree ? (
-          <RepertoireGraph root={tree} />
+          <RepertoireGraph root={tree} onDeleteNode={handleDeleteNode} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-950">
             {progress > 0 && progress < 100 && evaluatingFen ? (
