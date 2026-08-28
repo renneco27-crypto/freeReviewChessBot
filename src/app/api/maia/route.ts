@@ -20,11 +20,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // To capture multipv lines
       const moveMap = new Map<number, string>();
 
+      let outputBuffer = '';
       lc0.stdout.on('data', (data) => {
-        const output = data.toString();
-        const lines = output.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+        outputBuffer += data.toString();
+        let newlineIndex;
+        while ((newlineIndex = outputBuffer.indexOf('\n')) !== -1) {
+          const line = outputBuffer.slice(0, newlineIndex).trim();
+          outputBuffer = outputBuffer.slice(newlineIndex + 1);
+          if (line.length === 0) continue;
 
-        for (const line of lines) {
           if (line.startsWith('info depth')) {
             const parts = line.split(' ');
             const depthIndex = parts.indexOf('depth');
