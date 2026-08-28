@@ -132,7 +132,7 @@ export default function BuilderPage() {
             {progress > 0 && progress < 100 && evaluatingFen ? (
               <div className="w-[400px] h-[400px] shadow-2xl rounded-sm border-4 border-gray-800 dark:border-gray-700">
                 {/* @ts-ignore */}
-                <Chessboard position={evaluatingFen} arePiecesDraggable={false} animationDuration={100} />
+                <Chessboard id="builder-board" position={evaluatingFen} arePiecesDraggable={false} animationDuration={300} />
               </div>
             ) : (
               <span>{progress > 0 ? 'Building visualizer...' : 'Enter a username to begin.'}</span>

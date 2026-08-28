@@ -1,8 +1,8 @@
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 export async function fetchChesscomGames(username: string, maxGames = 15): Promise<string> {
-  // Add random 1-10s delay to avoid rate limiting
-  await delay(Math.floor(Math.random() * 10000) + 1000);
+  // Add random 1-4s delay to avoid rate limiting
+  await delay(Math.floor(Math.random() * 3000) + 1000);
 
   // Chess.com requires fetching the archives list first
   const archivesRes = await fetch(`https://api.chess.com/pub/player/${username}/games/archives`);
