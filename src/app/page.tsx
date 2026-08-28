@@ -291,7 +291,12 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-12 bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-      <h1 className="text-4xl font-bold mb-8">Chess Repertoire Builder</h1>
+      <div className="flex flex-col items-center mb-8 gap-2">
+        <h1 className="text-4xl font-bold">Chess Repertoire Builder</h1>
+        <a href="/builder" className="text-blue-600 hover:underline font-semibold bg-blue-100 px-4 py-2 rounded-full">
+          ✨ Try the New Automated Engine Builder ✨
+        </a>
+      </div>
       
       <div className="flex flex-col lg:flex-row gap-8 w-full max-w-7xl items-start">
         <div className="w-full max-w-[500px] lg:w-[500px] shrink-0">
