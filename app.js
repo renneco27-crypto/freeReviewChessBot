@@ -3844,16 +3844,52 @@ document.getElementById('importTabChesscom').addEventListener('click', function(
 document.getElementById('importTabPgn').addEventListener('click', function() { switchImportTab('panePgn', 'importTabPgn'); });
 document.getElementById('importTabFen').addEventListener('click', function() { switchImportTab('paneFen', 'importTabFen'); });
 
-// ── First / Last Move Navigation ──
+// ── Key Moments / Interesting Move Navigation ──
+function isInterestingMove(idx) {
+  if (idx < 0 || idx >= moveHistory.length) return false;
+  var m = moveHistory[idx];
+  if (!m) return false;
+  var cls = (m.classification || '').toLowerCase();
+  
+  // Tactical landmarks (blunders, mistakes, inaccuracies, brilliant, misses, great moves)
+  if (cls === 'brilliant' || cls === 'blunder' || cls === 'mistake' || cls === 'inaccuracy' || cls === 'miss' || cls === 'great') {
+    return true;
+  }
+  
+  // Graph fluctuations (eval swing >= 1.5 pawns)
+  var swing = Math.abs((m.evalAfter || 0) - (m.evalBefore || 0));
+  if (swing >= 1.5 || (m.evalSwing && m.evalSwing >= 1.5)) {
+    return true;
+  }
+  
+  return false;
+}
+
+function findPrevInterestingMove(currentIdx) {
+  var startIdx = (currentIdx === -1) ? moveHistory.length : currentIdx;
+  for (var i = startIdx - 1; i >= 0; i--) {
+    if (isInterestingMove(i)) return i;
+  }
+  return 0; // fallback to first move
+}
+
+function findNextInterestingMove(currentIdx) {
+  for (var i = currentIdx + 1; i < moveHistory.length; i++) {
+    if (isInterestingMove(i)) return i;
+  }
+  return moveHistory.length - 1; // fallback to final move
+}
+
 document.getElementById('firstMoveBtn').addEventListener('click', function() {
   if (!moveHistory || moveHistory.length === 0) return;
-  navIdx = -1;
-  updateNavDisplay();
+  var target = findPrevInterestingMove(navIdx);
+  goToMove(target);
 });
+
 document.getElementById('lastMoveBtn').addEventListener('click', function() {
   if (!moveHistory || moveHistory.length === 0) return;
-  navIdx = moveHistory.length - 1;
-  updateNavDisplay();
+  var target = findNextInterestingMove(navIdx);
+  goToMove(target);
 });
 
 // ── Sample Games ──
