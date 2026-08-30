@@ -1496,6 +1496,7 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
   };
   var evBefore = toCp(topBefore), evAfter = toCp(afterNeg);
   var delta = Math.max(0, evBefore - evAfter), prevCp = topBefore.cp || 0;
+  var isTop = (playedUci === topBefore.move);
   var onlyMove = secondBefore && (toCp(topBefore) - toCp(secondBefore)) >= 350;
 
   if (typeof afterNeg.mateIn === 'number') {
@@ -1503,12 +1504,14 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
     if (afterNeg.mateIn > 0 && evBefore < 50000) return 'best';
   }
 
-  if (playedUci === topBefore.move) return onlyMove ? 'great' : 'best';
+  // 1. BRILLIANT MOVE: Sacrifice check MUST run first (Chess.com: brilliant moves are best moves with a piece sacrifice)
+  if (detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore, isTop)) return 'brilliant';
+
+  // 2. BEST / GREAT MOVE
+  if (isTop) return onlyMove ? 'great' : 'best';
   if (onlyMove) return 'blunder';
 
-  if (detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore)) return 'brilliant';
-
-  // LOSING CAPTURE OVERRIDE: if we moved onto a defended square and lost significant
+  // 3. LOSING CAPTURE OVERRIDE: if we moved onto a defended square and lost significant
   // material (net >= 4 pawns), it's a blunder regardless of eval-delta thresholds.
   if (boardBefore && delta >= 200) {
     var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
@@ -1525,6 +1528,7 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
     }
   }
 
+  // 4. POLYNOMIAL WIN PROBABILITY LOSS
   var cats = ['best', 'excellent', 'good', 'inaccuracy', 'mistake'];
   for (var i = 0; i < cats.length; i++) {
     if (delta <= getThresh(cats[i], prevCp)) {
@@ -1535,24 +1539,50 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
   return 'blunder';
 }
 
-function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore) {
+function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore, isTopMove) {
   if (!boardBefore) return false;
-  var BRILLIANT_GAIN_CP = 200;
-  var WINNING_THRESHOLD = 600;
-
   var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
   var piece = boardBefore.get(from);
-  if (!piece || piece.type === 'p' || piece.type === 'k') return false; // Pawns and Kings (castling) excluded
-  if (evBefore >= WINNING_THRESHOLD || evBefore <= -WINNING_THRESHOLD) return false;
-  var gain = evAfter - evBefore;
-  if (isNaN(gain) || gain < BRILLIANT_GAIN_CP) return false;
+  if (!piece) return false;
+
+  var PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+  var pieceVal = PIECE_VAL[piece.type] || 0;
+  if (pieceVal < 3) return false; // Pawns and Kings (castling) excluded
+
+  // Position shouldn't already be a total blowout (> ±7.0 pawns)
+  if (evBefore >= 700 || evBefore <= -700) return false;
+
+  // The move must be strong (Top Engine move or delta <= 35cp)
+  var delta = Math.max(0, evBefore - evAfter);
+  if (delta > 35 && !isTopMove) return false;
+
+  // Position after must remain good/viable (not blunder into losing)
+  if (evAfter < -50) return false;
 
   try {
     var clone = new Chess(boardBefore.fen());
     var m = clone.move({ from: from, to: to, promotion: playedUci[4] || 'q' });
     if (!m) return false;
+    
+    var capturedVal = m.captured ? PIECE_VAL[m.captured] : 0;
     var oppMoves = clone.moves({ verbose: true });
-    return oppMoves.some(function(oppM) { return oppM.to === to; });
+    var squareAttacked = oppMoves.some(function(oppM) { return oppM.to === to; });
+    
+    // Sacrificing piece: piece value is strictly greater than captured piece, and square is attacked
+    var isMaterialSacrifice = squareAttacked && (pieceVal > capturedVal);
+
+    if (!isMaterialSacrifice) {
+      // Check if any higher/equal value pieces are now exposed and capturable for free
+      var attackedPieces = oppMoves.filter(function(oppM) {
+        var targetPiece = clone.get(oppM.to);
+        return targetPiece && PIECE_VAL[targetPiece.type] >= 3;
+      });
+      if (attackedPieces.length > 0 && delta <= 15) {
+        isMaterialSacrifice = true;
+      }
+    }
+
+    return isMaterialSacrifice;
   } catch (e) {
     return false;
   }
