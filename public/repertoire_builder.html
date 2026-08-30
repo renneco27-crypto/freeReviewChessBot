@@ -3,133 +3,249 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>♟️ Repertoire Builder, Move Notes & Practice Mode</title>
-<!-- Include Chess.js for move validation & FEN generation -->
+<title>Lawrence Cortes | Scotch Repertoire Engine</title>
+<!-- Include Chess.js for move validation & FEN simulation -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <style>
+  /* --- Swiss Minimalist Void Theme (lawrence.html Design Principles) --- */
   :root {
-    --bg-dark: #0f141c;
-    --bg-card: #161d27;
-    --bg-card-hover: #1f2937;
-    --border: #263345;
-    --text-main: #f0f6fc;
-    --text-muted: #8b949e;
-    --accent: #38bdf8;
-    --accent-hover: #0284c7;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --danger: #ef4444;
-    --sq-light: #f0d9b5;
-    --sq-dark: #b58863;
-    --sq-selected: rgba(255, 255, 0, 0.45);
-    --sq-last-move: rgba(56, 189, 248, 0.4);
-    --sq-dest-option: rgba(0, 0, 0, 0.22);
-    --sq-error: rgba(239, 68, 68, 0.55);
+    --bg-void: #050505;
+    --bg-panel: #0a0a0a;
+    --bg-card: #111111;
+    --bg-card-hover: #171717;
+    --bg-card-active: #1e1e1e;
+    --border-subtle: #1a1a1a;
+    --border-card: #282828;
+    --border-strong: #333333;
+    
+    --text-white: #ffffff;
+    --text-heading: #ececec;
+    --text-muted: #888888;
+    --text-dim: #555555;
+    
+    --accent-red: #e63946;       /* Signature Crimson / Coral */
+    --accent-amber: #f4a261;     /* Warm Amber / Sand */
+    --accent-maroon: #9b2226;    /* Deep Crimson Accent */
+    --accent-green: #22c55e;     /* Emerald Accent */
+    
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "Courier New", Courier, monospace;
+
+    /* Chessboard Minimal Swiss Palette */
+    --sq-light: #2c2c2c;
+    --sq-dark: #121212;
+    --sq-selected: rgba(244, 162, 97, 0.45);
+    --sq-last-move: rgba(230, 57, 70, 0.35);
+    --sq-dest-option: rgba(230, 57, 70, 0.7);
+    --sq-error: rgba(230, 57, 70, 0.75);
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  body { background: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-  header {
-    background: #111823;
-    border-bottom: 1px solid var(--border);
-    padding: 10px 20px;
+  body, html {
+    width: 100%;
+    height: 100vh;
+    background-color: var(--bg-void);
+    color: var(--text-white);
+    font-family: var(--font-sans);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* --- Global Swiss Minimalist Top Header --- */
+  .swiss-header {
+    height: 52px;
+    background: rgba(5, 5, 5, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-white);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    z-index: 10;
+    gap: 8px;
+    text-decoration: none;
   }
-  header h1 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; font-weight: 700; color: #fff; }
-  header .badge { background: #0284c7; color: #fff; font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .nav-logo .tag {
+    color: var(--accent-red);
+    font-weight: 400;
+    font-size: 0.75rem;
+    letter-spacing: 1.5px;
+  }
 
   .shortcuts-hint {
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
     color: var(--text-muted);
-    background: #1c2636;
+    background: #0f0f0f;
     padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    border-radius: 2px;
+    border: 1px solid var(--border-card);
     display: inline-flex;
     align-items: center;
     gap: 6px;
   }
+
   .kbd {
-    background: #283548;
-    color: #e2e8f0;
+    background: #1c1c1c;
+    color: #ffffff;
     padding: 1px 5px;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.72rem;
-    border: 1px solid #3b4c66;
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    border: 1px solid var(--border-strong);
   }
 
+  /* Universal Buttons */
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #ffffff;
+    background: #161616;
+    border: 1px solid #333333;
+    padding: 6px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+
+  .btn:hover {
+    background: #ffffff;
+    color: #050505;
+    border-color: #ffffff;
+  }
+
+  .btn-primary {
+    background: #161616;
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+  }
+  .btn-primary:hover {
+    background: var(--accent-red);
+    color: #050505;
+    border-color: var(--accent-red);
+  }
+
+  .btn-practice {
+    background: #161616;
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+  }
+  .btn-practice:hover {
+    background: var(--accent-green);
+    color: #050505;
+    border-color: var(--accent-green);
+  }
+
+  .btn-warning {
+    background: #161616;
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+  }
+  .btn-warning:hover {
+    background: var(--accent-amber);
+    color: #050505;
+    border-color: var(--accent-amber);
+  }
+
+  /* Main Grid Layout */
   .main-layout {
     display: grid;
     grid-template-columns: 340px 1fr 370px;
     height: calc(100vh - 52px);
     overflow: hidden;
+    background-color: var(--bg-void);
   }
 
-  /* Left Panel: Variations / Decompiled Lines */
+  /* Panels */
   .panel {
-    background: var(--bg-card);
-    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     height: 100%;
   }
+
   .panel-header {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    font-weight: 700;
-    font-size: 0.82rem;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #111823;
+    background: #090909;
+    color: var(--text-heading);
     flex-shrink: 0;
   }
-  .panel-body { padding: 10px 12px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
 
+  .panel-body {
+    padding: 12px 14px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Terminal-Style Textarea */
   textarea {
     width: 100%;
     height: 68px;
-    background: #0b0f17;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-main);
-    padding: 6px 8px;
+    background: #080808;
+    border: 1px solid var(--border-card);
+    border-left: 2px solid var(--accent-red);
+    border-radius: 2px;
+    color: var(--text-heading);
+    padding: 6px 10px;
     font-size: 0.75rem;
-    font-family: monospace;
+    font-family: var(--font-mono);
     resize: none;
     flex-shrink: 0;
+    line-height: 1.4;
   }
-  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent-red);
+  }
 
-  .btn-group { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
-  .btn {
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: #1f2937;
-    color: var(--text-main);
-    transition: all 0.15s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
+  .btn-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
   }
-  .btn:hover { background: #374151; border-color: #4b5563; }
-  .btn-primary { background: #0284c7; border-color: #38bdf8; color: white; }
-  .btn-primary:hover { background: #0369a1; }
-  .btn-success { background: #16a34a; border-color: #22c55e; color: white; }
-  .btn-success:hover { background: #15803d; }
-  .btn-warning { background: #d97706; border-color: #f59e0b; color: white; }
-  .btn-warning:hover { background: #b45309; }
 
   /* Decompiled Lines List */
   .lines-container {
@@ -141,67 +257,107 @@
     padding-right: 2px;
     min-height: 120px;
   }
+
   .subset-nav {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #111c2e;
-    border: 1px solid #1e3a5f;
-    border-radius: 6px;
-    padding: 6px 9px;
+    background: #0f0f0f;
+    border: 1px solid var(--border-card);
+    border-radius: 2px;
+    padding: 6px 10px;
     margin-bottom: 6px;
-    font-size: 0.74rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
   }
+
   .subset-badge {
-    background: #0284c7;
-    color: #fff;
-    padding: 2px 7px;
-    border-radius: 12px;
+    background: #181818;
+    border: 1px solid var(--border-strong);
+    color: var(--accent-red);
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: var(--font-mono);
     font-size: 0.65rem;
     font-weight: 700;
+    letter-spacing: 1px;
   }
+
   .sub-branch-btn {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #ffffff;
+    background: #141414;
+    border: 1px solid var(--accent-red);
+    border-radius: 2px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    margin-top: 5px;
-    font-size: 0.7rem;
-    color: #38bdf8;
-    background: #0d1e33;
-    border: 1px solid #1e40af;
-    border-radius: 4px;
-    padding: 3px 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
   }
   .sub-branch-btn:hover {
-    background: #0284c7;
-    color: white;
-    border-color: #38bdf8;
+    background: var(--accent-red);
+    color: #050505;
+    border-color: var(--accent-red);
     transform: scale(1.02);
   }
-  .line-card {
-    background: #0f1520;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 9px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .line-card:hover { border-color: var(--accent); background: #172131; }
-  .line-card.active { border-color: var(--accent); background: #172a45; box-shadow: 0 0 0 1px var(--accent); }
-  .line-header { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; }
-  .line-title { font-weight: 700; color: var(--accent); font-size: 0.78rem; }
-  .line-moves { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; word-break: break-word; font-family: monospace; }
 
-  /* Center Panel: Fluid Movable Chessboard & Controls */
+  .line-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 3px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .line-card:hover {
+    border-color: var(--accent-red);
+    background: var(--bg-card-hover);
+    transform: translateX(2px);
+  }
+  .line-card.active {
+    border-color: var(--accent-red);
+    background: var(--bg-card-active);
+    box-shadow: 0 0 0 1px var(--accent-red), 0 4px 20px rgba(230, 57, 70, 0.15);
+  }
+  .line-header {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .line-title {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    color: var(--text-white);
+    font-size: 0.8rem;
+  }
+  .line-moves {
+    font-size: 0.72rem;
+    color: #aaaaaa;
+    line-height: 1.35;
+    word-break: break-word;
+    font-family: var(--font-mono);
+  }
+
+  /* Center Panel: Fluid Movable Chessboard */
   .center-panel {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #0b0f17;
+    background: var(--bg-void);
     padding: 8px 12px;
     position: relative;
     overflow: hidden;
@@ -227,9 +383,9 @@
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     grid-template-rows: repeat(8, 1fr);
-    border: 3px solid #1e293b;
-    border-radius: 4px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    border: 2px solid var(--border-card);
+    border-radius: 2px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
     user-select: none;
     position: relative;
     transition: transform 0.1s ease;
@@ -253,41 +409,42 @@
   }
   .square.light { background: var(--sq-light); }
   .square.dark { background: var(--sq-dark); }
-  .square.selected { background: var(--sq-selected) !important; }
-  .square.last-move { background: var(--sq-last-move) !important; }
-  .square.error-square { background: var(--sq-error) !important; }
+  .square.selected { background: var(--sq-selected) !important; box-shadow: inset 0 0 0 2px var(--accent-amber); }
+  .square.last-move { background: var(--sq-last-move) !important; box-shadow: inset 0 0 0 2px var(--accent-red); }
+  .square.error-square { background: var(--sq-error) !important; box-shadow: inset 0 0 0 2px var(--accent-red); }
 
   .dest-dot {
-    width: clamp(12px, 2.8vw, 18px);
-    height: clamp(12px, 2.8vw, 18px);
+    width: clamp(10px, 2.4vw, 16px);
+    height: clamp(10px, 2.4vw, 16px);
     background: var(--sq-dest-option);
     border-radius: 50%;
     position: absolute;
     pointer-events: none;
     z-index: 5;
+    box-shadow: 0 0 8px rgba(230, 57, 70, 0.8);
   }
   .capture-ring {
     position: absolute;
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    border: 3px solid rgba(0, 0, 0, 0.25);
+    border: 3px solid rgba(230, 57, 70, 0.7);
     pointer-events: none;
     z-index: 5;
   }
 
   .square-coord {
     position: absolute;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 700;
     line-height: 1;
     pointer-events: none;
     z-index: 1;
+    color: #666666;
   }
-  .coord-rank { top: 2px; left: 2px; }
-  .coord-file { bottom: 2px; right: 2px; }
-  .square.light .square-coord { color: var(--sq-dark); }
-  .square.dark .square-coord { color: var(--sq-light); }
+  .coord-rank { top: 3px; left: 3px; }
+  .coord-file { bottom: 3px; right: 3px; }
 
   .piece-img {
     width: 88%;
@@ -304,57 +461,66 @@
     gap: 6px;
     flex-shrink: 0;
   }
-  .board-controls .btn { width: 38px; height: 32px; font-size: 0.88rem; padding: 0; }
+  .board-controls .btn {
+    width: 38px;
+    height: 32px;
+    font-size: 0.88rem;
+    padding: 0;
+  }
 
   /* Right Panel: Repertoire Tree & Branch Selector */
   .right-panel {
-    background: var(--bg-card);
-    border-left: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     height: 100%;
   }
 
-  /* Opening Header & Note Section */
+  /* Opening Header & Move Explanations */
   .opening-info-box {
     padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    background: #111823;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #090909;
     flex-shrink: 0;
   }
   .opening-title {
     font-size: 0.88rem;
     font-weight: 700;
-    color: #38bdf8;
+    color: var(--text-white);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
   .eco-badge {
-    background: #1e293b;
-    border: 1px solid #334155;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-family: monospace;
-    color: #94a3b8;
+    background: #161616;
+    border: 1px solid var(--border-card);
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    color: var(--accent-red);
+    letter-spacing: 1px;
   }
 
   .note-editor-box {
     margin-top: 6px;
-    background: #0b0f17;
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: #080808;
+    border: 1px solid var(--border-card);
+    border-left: 2px solid var(--accent-amber);
+    border-radius: 2px;
     padding: 6px 8px;
   }
   .note-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent-amber);
     margin-bottom: 2px;
   }
   .note-input {
@@ -362,7 +528,7 @@
     height: 44px;
     background: transparent;
     border: none;
-    color: #f1f5f9;
+    color: var(--text-heading);
     font-size: 0.75rem;
     resize: none;
     outline: none;
@@ -372,17 +538,17 @@
 
   .branch-section {
     padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
     max-height: 38%;
     overflow-y: auto;
     flex-shrink: 0;
   }
   .branch-title {
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
     color: var(--text-muted);
-    font-weight: 700;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
     margin-bottom: 6px;
     display: flex;
     align-items: center;
@@ -392,55 +558,74 @@
   .candidate-btn {
     width: 100%;
     text-align: left;
-    background: #0f1520;
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: #0e0e0e;
+    border: 1px solid var(--border-card);
+    border-radius: 2px;
     padding: 6px 10px;
     margin-bottom: 5px;
-    color: var(--text-main);
+    color: var(--text-white);
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
+    font-family: var(--font-mono);
   }
   .candidate-btn:hover {
-    border-color: var(--accent);
-    background: #17253b;
+    border-color: var(--accent-red);
+    background: #171717;
     transform: translateX(3px);
   }
-  .candidate-move { font-weight: 800; font-size: 0.88rem; color: #38bdf8; }
-  .candidate-meta { font-size: 0.68rem; color: var(--text-muted); text-align: right; }
+  .candidate-move {
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: var(--accent-red);
+  }
+  .candidate-meta {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-align: right;
+  }
 
   .notation-view {
     flex: 1;
     overflow-y: auto;
     padding: 10px 14px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
-    line-height: 1.7;
+    line-height: 1.8;
     min-height: 80px;
+    color: #888888;
   }
   .notation-move {
-    padding: 1px 5px;
-    border-radius: 4px;
+    padding: 2px 6px;
+    border-radius: 2px;
     cursor: pointer;
     display: inline-block;
-    color: #e2e8f0;
+    color: #cccccc;
+    transition: all 0.1s ease;
   }
-  .notation-move:hover { background: #1f2937; color: var(--accent); }
-  .notation-move.active { background: #0284c7; color: white; font-weight: bold; }
+  .notation-move:hover {
+    background: #202020;
+    color: #ffffff;
+  }
+  .notation-move.active {
+    background: var(--accent-red);
+    color: #ffffff;
+    font-weight: bold;
+  }
 
   .fen-box {
-    background: #0b0f17;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    background: #080808;
+    border: 1px solid var(--border-card);
+    border-left: 2px solid var(--accent-amber);
+    border-radius: 2px;
     padding: 4px 8px;
     font-size: 0.68rem;
-    font-family: monospace;
+    font-family: var(--font-mono);
     word-break: break-all;
     margin-top: 2px;
-    color: #94a3b8;
+    color: var(--text-muted);
     user-select: all;
     max-width: min(calc(100vh - 210px), 510px, 85vw);
     width: 100%;
@@ -450,13 +635,15 @@
 
   /* Practice Mode Banner */
   .practice-banner {
-    background: #064e3b;
-    border: 1px solid #059669;
-    color: #a7f3d0;
+    background: #0f1812;
+    border: 1px solid var(--accent-green);
+    color: #4ade80;
     padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 0.78rem;
-    font-weight: 600;
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -468,23 +655,26 @@
 </head>
 <body>
 
-<header>
-  <h1>♟️ Repertoire Builder & PGN Decompiler <span class="badge">Live Practice & Move Notes</span></h1>
+<!-- Swiss Minimalist Header -->
+<header class="swiss-header">
+  <div class="nav-logo">
+    ♟️ LAWRENCE CORTES <span class="tag">/ SCOTCH REPERTOIRE</span>
+  </div>
   
   <div class="shortcuts-hint">
-    <span>Shortcuts:</span>
-    <span class="kbd">◀ Left</span> Prev
-    <span class="kbd">Right ▶</span> Next
-    <span class="kbd">▲ Up</span> Start
-    <span class="kbd">▼ Down</span> End
-    <span class="kbd">F</span> Flip
+    <span>KEYS:</span>
+    <span class="kbd">◀ LEFT</span> PREV
+    <span class="kbd">RIGHT ▶</span> NEXT
+    <span class="kbd">▲ UP</span> START
+    <span class="kbd">▼ DOWN</span> END
+    <span class="kbd">F</span> FLIP
   </div>
 
   <div style="display:flex; gap:8px;">
-    <button class="btn btn-success" id="practice-btn" onclick="togglePracticeMode()">🎯 Practice Line</button>
-    <button class="btn btn-warning" onclick="revertToOriginalPgn()">🔄 Revert to Original</button>
-    <button class="btn" onclick="flipBoard()">🔄 Flip Board</button>
-    <button class="btn btn-primary" onclick="exportCurrentLine()">💾 Export Line</button>
+    <button class="btn btn-practice" id="practice-btn" onclick="togglePracticeMode()">🎯 PRACTICE LINE</button>
+    <button class="btn btn-warning" onclick="revertToOriginalPgn()">🔄 REVERT PGN</button>
+    <button class="btn" onclick="flipBoard()">🔄 FLIP</button>
+    <button class="btn btn-primary" onclick="exportCurrentLine()">💾 EXPORT</button>
   </div>
 </header>
 
@@ -492,23 +682,23 @@
   <!-- Left Panel: PGN Input & Decompiled Variations -->
   <div class="panel">
     <div class="panel-header">
-      <span>📥 Repertoire Source PGN</span>
-      <span id="line-count-badge" style="font-size:0.75rem; color:var(--accent);">0 Lines</span>
+      <span>📥 REPERTOIRE SOURCE PGN</span>
+      <span id="line-count-badge" class="subset-badge">0 LINES</span>
     </div>
     <div class="panel-body">
       <textarea id="pgn-input" placeholder="Paste repertoire PGN with nested variations (...) and {comments}..."></textarea>
       <div class="btn-group">
-        <button class="btn btn-primary" style="flex:1;" onclick="decompilePgn()">⚡ Decompile</button>
-        <button class="btn" onclick="loadSampleScotch()">Sample</button>
-        <button class="btn" onclick="document.getElementById('file-upload').click()">📁 Upload</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="decompilePgn()">⚡ DECOMPILE</button>
+        <button class="btn" onclick="loadSampleScotch()">SAMPLE</button>
+        <button class="btn" onclick="document.getElementById('file-upload').click()">📁 UPLOAD</button>
         <input type="file" id="file-upload" accept=".pgn" style="display:none" onchange="handleFileUpload(event)">
       </div>
 
-      <div style="font-size:0.78rem; font-weight:700; color:var(--text-muted); margin-top:4px;">
-        DECOMPILED VARIATIONS (<span id="total-lines-count">0</span>)
+      <div style="font-family:var(--font-mono); font-size:0.72rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-top:4px;">
+        DECOMPILED VARIATIONS (<span id="total-lines-count" style="color:var(--accent-red);">0</span>)
       </div>
       <div class="lines-container" id="lines-list">
-        <div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px;">
+        <div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px; font-family:var(--font-mono);">
           Load or paste a PGN above to decompile into playable branches.
         </div>
       </div>
@@ -520,8 +710,8 @@
     <div class="board-container">
       <!-- Practice Mode Banner -->
       <div id="practice-alert" class="practice-banner" style="display:none; width:520px;">
-        <span id="practice-status-text">🎯 Practice Mode Active: Play White's move from memory!</span>
-        <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:#047857;" onclick="togglePracticeMode()">Exit</button>
+        <span id="practice-status-text">🎯 PRACTICE MODE ACTIVE: PLAY OPPONENT'S LINE FROM MEMORY!</span>
+        <button class="btn btn-warning" style="padding:2px 8px; font-size:0.68rem;" onclick="togglePracticeMode()">EXIT</button>
       </div>
 
       <div id="chessboard" class="chessboard"></div>
@@ -534,7 +724,7 @@
       </div>
 
       <div style="text-align:center;">
-        <span id="move-indicator" style="font-weight:700; font-size:0.95rem; color:var(--accent);">Starting Position</span>
+        <span id="move-indicator" style="font-family:var(--font-mono); font-weight:700; font-size:0.88rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent-red);">STARTING POSITION</span>
       </div>
       <div class="fen-box" id="fen-display">rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1</div>
     </div>
@@ -552,27 +742,27 @@
       <!-- Move Notes / Explanations Editor -->
       <div class="note-editor-box">
         <div class="note-header">
-          <span>📝 Move Explanation & Tactical Notes:</span>
-          <button class="btn" style="padding:2px 6px; font-size:0.68rem; height:20px;" onclick="saveCurrentNote()">💾 Save Note</button>
+          <span>📝 TACTICAL NOTE:</span>
+          <button class="btn btn-warning" style="padding:2px 6px; font-size:0.65rem; height:20px;" onclick="saveCurrentNote()">💾 SAVE</button>
         </div>
-        <textarea id="move-note-input" class="note-input" placeholder="Type tactical rationale (e.g. Attacks the e4 pawn, prepares ...Bb4)..." oninput="onNoteTyped()"></textarea>
+        <textarea id="move-note-input" class="note-input" placeholder="Type tactical rationale (e.g. Attacks e4 pawn, prepares ...Bb4)..." oninput="onNoteTyped()"></textarea>
       </div>
     </div>
 
     <!-- Available Branches -->
     <div class="branch-section">
       <div class="branch-title">
-        <span>Branches at Current Position</span>
-        <span id="candidate-count" style="color:var(--accent);">0</span>
+        <span>BRANCHES AT POSITION</span>
+        <span id="candidate-count" style="color:var(--accent-red);">0</span>
       </div>
       <div id="candidate-branches">
-        <div style="color:var(--text-muted); font-size:0.8rem;">No branches available.</div>
+        <div style="color:var(--text-muted); font-size:0.8rem; font-family:var(--font-mono);">No branches available.</div>
       </div>
     </div>
 
     <!-- Active Line Moves -->
     <div class="panel-header">
-      <span>📜 Active Line Notation</span>
+      <span>📜 ACTIVE LINE NOTATION</span>
     </div>
     <div class="notation-view" id="notation-history"></div>
   </div>
@@ -587,7 +777,7 @@ const PIECE_SVGS = {
     'b': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGcgZmlsbD0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiPjxwYXRoIGQ9Ik05IDM2YzMuMzktLjk3IDEwLjExLjQzIDEzLjUtMiAzLjM5IDIuNDMgMTAuMTEgMS4wMyAxMy41IDIgMCAwIDEuNjUuNTQgMyAyLS42OC45Ny0xLjY1Ljk5LTMgLjUtMy4zOS0uOTctMTAuMTEuNDYtMTMuNS0xLTMuMzkgMS40Ni0xMC4xMS4wMy0xMy41IDEtMS4zNTQuNDktMi4zMjMuNDctMy0uNSAxLjM1NC0xLjk0IDMtMiAzLTJ6Ii8+PHBhdGggZD0iTTE1IDMyYzIuNSAyLjUgMTIuNSAyLjUgMTUgMCAuNS0xLjUgMC0yIDAtMiAwLTIuNS0yLjUtNC0yLjUtNCA1LjUtMS41IDYtMTEuNS01LTE1LjUtMTEgNC0xMC41IDE0LTUgMTUuNSAwIDAtMi41IDEuNS0yLjUgNCAwIDAtLjUuNSAwIDJ6Ii8+PHBhdGggZD0iTTI1IDhhMi41IDIuNSAwIDEgMS01IDAgMi41IDIuNSAwIDEgMSA1IDB6Ii8+PC9nPjxwYXRoIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiIHN0cm9rZT0ibWl0ZXIiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48L2c+PC9zdmc+",
     'r': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMzloMjd2LTNIOXYzem0zLTN2LTRoMjF2NEgxMnoiLz48cGF0aCBkPSJNMTIgOSBoNHYyaDVWOWg1djJoNVY5aDR2NUgxMXoiIHN0cm9rZS1saW5lY2FwPSJidXR0Ii8+PHBhdGggZD0iTTM0IDE0bC0zIDNIMTRsLTMtMyIvPjxwYXRoIGQ9Ik0zMSAxN3YxMi41SDE0VjE3IiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0zMSAyOS41bDEuNSAyLjVoLTIwbDEuNS0yLjUiLz48cGF0aCBkPSJNMTEgMTRoMjMiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48L2c+PC9zdmc+",
     'q': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTggMTJhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwem0xNi41LTQuNWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6TTQxIDEyYTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMTYgOC41YTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMzMgOWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6Ii8+PHBhdGggZD0iTTkgMjZjOC41LTEuNSAyMS0xLjUgMjcgMGwyLTEyLTcgMTFWMTFsLTUuNSAxMy41LTMtMTUtMyAxNS01LjUtMTRWMjVMNyAxNGwyIDEyeiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiLz48cGF0aCBkPSJNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiIHN0cm9rZS1saW5lY2FwPSJidXR0Ii8+PHBhdGggZD0iTTExLjUgMzBjMy41LTEgMTguNS0xIDIyIDBNMTIgMzMuNWM2LTEgMTUtMSAyMSAwIiBmaWxsPSJub25lIi8+PC9nPjwvc3ZnPg==",
-    'k': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48cGF0aCBkPSJNMjIuNSAyNXM0LjUtNy41IDMtMTAuNWMwIDAtMS0yLjUtMy0yLjVzLTMgMi41LTMgMi41Yy0xLjUgMyAzIDEwLjUgMyAxMC41IiBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMFYzN3oiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNMTEuNSAzMGM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDAiLz48L2c+PC9zdmc+"
+    'k': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48cGF0aCBkPSJNMjIuNSAyNXM0LjUtNy41IDMtMTAuNWMwIDAtMS0yLjUtMy0yLjVzLTMgMi41LTMgMi41Yy0xLjUgMyAzIDEwLjUgMyAxMC41IiBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMFYzN3oiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNMExLjUgMzBjNS41LTMgMTUuNS0zIDIxIDAiLz48L2c+PC9zdmc+"
   },
   'b': {
     'p': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48cGF0aCBkPSJNMjIuNSA5Yy0yLjIxIDAtNCAxLjc5LTQgNCAwIC44OS4yOSAxLjcxLjc4IDIuMzhDMTcuMzMgMTYuNSAxNiAxOC41OSAxNiAyMWMwIDIuMDMuOTQgMy44NCAyLjQxIDUuMDMtMyAxLjA2LTcuNDEgNS41NS03LjQxIDEzLjQ3aDIzYzAtNy45Mi00LjQxLTEyLjQxLTcuNDEtMTMuNDcgMS40Ny0xLjE5IDIuNDEtMyAyLjQxLTUuMDMgMC0yLjQxLTEuMzMtNC41LTMuMjgtNS42Mi40OS0uNjcuNzgtMS40OS43OC0yLjM4IDAtMi4yMS0xLjc5LTQtNC00eiIgZmlsbD0iIzAwMCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTIyLjUgMTBjLTEuNjUgMC0zIDEuMzQtMyAzIDAgLjY3LjIyIDEuMjguNTkgMS43OC4zNi40OS44IDEuMTMuOTEgMi4yMi4xMSAxLjA4LS4yMiAyLS45MSAyLjY5QzE4LjY3IDIxLjExIDE3LjUgMjIuODkgMTcuNSAyNWMwIDEuNTIuNyAyLjg4IDEuOCAzLjc3LTIuMjUuOC01LjU1IDQuMTYtNS41NSAxMC4xaDE3LjVjMC01Ljk0LTMuMy05LjMtNS41NS0xMC4xIDEuMS0uODkgMS44LTIuMjUgMS44LTMuNzcgMC0yLjExLTEuMTctMy44OS0yLjU5LTUuMzEtLjY5LS42OS0xLjAyLTEuNjEtLjkxLTIuNjkuMTEtMS4wOS41NS0xLjczLjkxLTIuMjIuMzctLjUuNTktMS4xMS41OS0xLjc4IDAtMS42Ni0xLjM1LTMtMy0zeiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjAuNzUiIG9wYWNpdHk9IjAuMzUiLz48L3N2Zz4=",
@@ -744,79 +934,129 @@ function renderBoard() {
   });
 
   document.getElementById('fen-display').innerText = chess.fen();
-  const turn = chess.turn() === 'w' ? 'White to move' : 'Black to move';
   
   if (isPracticeMode) {
     const isUserTurn = chess.turn() === practiceUserSide;
-    document.getElementById('practice-status-text').innerText = isUserTurn 
-      ? `🎯 Your turn (${practiceUserSide==='w'?'White':'Black'}): Play move from memory!`
-      : `⏳ Opponent is responding...`;
+    const statusText = document.getElementById('practice-status-text');
+    if (isUserTurn) {
+      statusText.innerText = `🎯 YOUR TURN (${practiceUserSide === 'w' ? 'WHITE' : 'BLACK'}): PLAY NEXT PREPARED MOVE!`;
+      statusText.style.color = '#4ade80';
+    } else {
+      statusText.innerText = `⏳ OPPONENT'S TURN...`;
+      statusText.style.color = '#f4a261';
+    }
   }
 }
 
-// ----------------------------------------------------
-// PIECE DRAG & DROP / CLICK MOVEMENT
-// ----------------------------------------------------
 function handleSquareClick(square) {
-  if (!selectedSquare) {
-    const piece = chess.get(square);
-    if (piece && piece.color === chess.turn()) {
-      if (isPracticeMode && chess.turn() !== practiceUserSide) return;
-      selectedSquare = square;
-      legalMoves = chess.moves({ square: square, verbose: true });
-    }
-  } else {
+  if (selectedSquare) {
     if (selectedSquare === square) {
       selectedSquare = null;
       legalMoves = [];
-    } else {
-      makeMove(selectedSquare, square);
+      renderBoard();
+      return;
+    }
+
+    const moveAttempt = legalMoves.find(m => m.to === square);
+    if (moveAttempt) {
+      executeMove({ from: selectedSquare, to: square, promotion: 'q' });
+      selectedSquare = null;
+      legalMoves = [];
+      return;
     }
   }
-  renderBoard();
-}
 
-function handleDragStart(e, square) {
   const piece = chess.get(square);
-  if (piece && piece.color === chess.turn()) {
-    if (isPracticeMode && chess.turn() !== practiceUserSide) return;
+  if (piece) {
+    if (isPracticeMode && piece.color !== practiceUserSide) {
+      return;
+    }
+    if (!isPracticeMode && piece.color !== chess.turn()) {
+      return;
+    }
+
     selectedSquare = square;
     legalMoves = chess.moves({ square: square, verbose: true });
-    e.dataTransfer.setData('text/plain', square);
+    renderBoard();
+  } else {
+    selectedSquare = null;
+    legalMoves = [];
     renderBoard();
   }
 }
 
-function handleDrop(e, targetSquare) {
-  e.preventDefault();
-  const sourceSquare = e.dataTransfer.getData('text/plain') || selectedSquare;
-  if (sourceSquare && sourceSquare !== targetSquare) {
-    makeMove(sourceSquare, targetSquare);
+function handleDragStart(e, square) {
+  const piece = chess.get(square);
+  if (!piece) return;
+  if (isPracticeMode && piece.color !== practiceUserSide) {
+    e.preventDefault();
+    return;
   }
+  if (!isPracticeMode && piece.color !== chess.turn()) {
+    e.preventDefault();
+    return;
+  }
+
+  e.dataTransfer.setData('text/plain', square);
+  selectedSquare = square;
+  legalMoves = chess.moves({ square: square, verbose: true });
 }
 
-function makeMove(from, to) {
-  try {
-    const move = chess.move({ from, to, promotion: 'q' });
-    if (move) {
-      errorSquare = null;
-      lastMoveSquares = [from, to];
-      selectedSquare = null;
-      legalMoves = [];
-      
-      if (isPracticeMode) {
-        handlePracticeUserMove(move);
-      } else {
-        recordPlayerMove(move);
-      }
-      renderBoard();
-      return true;
-    }
-  } catch (err) {
-    console.warn("Illegal move:", from, to);
+function handleDrop(e, targetSquare) {
+  e.preventDefault();
+  const sourceSquare = e.dataTransfer.getData('text/plain');
+  if (!sourceSquare) return;
+
+  const moveAttempt = legalMoves.find(m => m.from === sourceSquare && m.to === targetSquare);
+  if (moveAttempt) {
+    executeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
   }
   selectedSquare = null;
   legalMoves = [];
+}
+
+function executeMove(moveObj) {
+  try {
+    const move = chess.move(moveObj);
+    if (move) {
+      lastMoveSquares = [move.from, move.to];
+      errorSquare = null;
+
+      if (isPracticeMode) {
+        handlePracticeUserMove(move);
+        return;
+      }
+
+      // Normal exploration move:
+      let matchingChild = currentTreeNode ? currentTreeNode.children.find(c => c.san === move.san) : null;
+      if (!matchingChild && currentTreeNode) {
+        matchingChild = new TreeNode(move.san, currentTreeNode, currentTreeNode.ply + 1, chess.fen(), "", move.from, move.to);
+        currentTreeNode.children.push(matchingChild);
+      }
+
+      currentTreeNode = matchingChild;
+      currentPly++;
+
+      // Append or replace in moveHistory
+      moveHistory = moveHistory.slice(0, currentPly);
+      moveHistory.push({
+        san: move.san,
+        fen: chess.fen(),
+        node: currentTreeNode,
+        comment: currentTreeNode ? currentTreeNode.comment : ""
+      });
+
+      updateOpeningAndNoteDisplay();
+      renderNotationHistory();
+      renderCandidateBranches();
+      renderBoard();
+
+      document.getElementById('move-indicator').innerText = `MOVE ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${move.san}`;
+      return true;
+    }
+  } catch (err) {
+    console.error("Illegal move:", err);
+  }
   renderBoard();
   return false;
 }
@@ -836,7 +1076,7 @@ function togglePracticeMode() {
 
   if (isPracticeMode) {
     btn.className = "btn btn-warning";
-    btn.innerText = "⏹ Exit Practice";
+    btn.innerText = "⏹ EXIT PRACTICE";
     alertBox.style.display = "flex";
     
     // Practice starts directly from CURRENT position in the Active Line!
@@ -845,17 +1085,17 @@ function togglePracticeMode() {
     
     const lineNodes = decompiledLines[activeLineIndex] || [];
     const moveNumber = Math.ceil((currentPly + 1) / 2);
-    const turnStr = practiceUserSide === 'w' ? 'White' : 'Black';
+    const turnStr = practiceUserSide === 'w' ? 'WHITE' : 'BLACK';
     
     if (currentPly >= lineNodes.length) {
-      document.getElementById('practice-status-text').innerText = `⚠️ Line already at final move! Go to an earlier move in notation to practice.`;
+      document.getElementById('practice-status-text').innerText = `⚠️ LINE COMPLETED! SELECT AN EARLIER MOVE IN NOTATION TO PRACTICE.`;
     } else {
       document.getElementById('practice-status-text').innerText = 
-        `🎯 Practicing from Move ${moveNumber} (${turnStr}) to end of line (${lineNodes.length} plies total). Play next move from memory!`;
+        `🎯 PRACTICING FROM MOVE ${moveNumber} (${turnStr}) TO END (${lineNodes.length} PLIES TOTAL). PLAY FROM MEMORY!`;
     }
   } else {
-    btn.className = "btn btn-success";
-    btn.innerText = "🎯 Practice Line";
+    btn.className = "btn btn-practice";
+    btn.innerText = "🎯 PRACTICE LINE";
     alertBox.style.display = "none";
     errorSquare = null;
     updateToPly(currentPly);
@@ -881,7 +1121,7 @@ function handlePracticeUserMove(move) {
 
     // Check if line complete
     if (currentPly >= lineNodes.length) {
-      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized from this position)`;
+      document.getElementById('practice-status-text').innerText = `🎉 REPERTOIRE LINE COMPLETED! (100% MEMORIZED)`;
       return;
     }
 
@@ -901,8 +1141,8 @@ function handlePracticeUserMove(move) {
     boardEl.classList.add('shake');
 
     const expectedSan = expectedNode ? expectedNode.san : "Unknown";
-    const noteHint = expectedNode && expectedNode.comment ? ` — Note: ${expectedNode.comment}` : '';
-    document.getElementById('practice-status-text').innerText = `❌ Incorrect move! Prepared response was: ${expectedSan}${noteHint}`;
+    const noteHint = expectedNode && expectedNode.comment ? ` — NOTE: ${expectedNode.comment}` : '';
+    document.getElementById('practice-status-text').innerText = `❌ INCORRECT MOVE! PREPARED RESPONSE: ${expectedSan}${noteHint}`;
   }
 }
 
@@ -926,7 +1166,7 @@ function autoPlayOpponentMove() {
         renderBoard();
 
         if (currentPly >= lineNodes.length) {
-          document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed!`;
+          document.getElementById('practice-status-text').innerText = `🎉 REPERTOIRE LINE COMPLETED!`;
         }
       }
     } catch (e) {
@@ -936,7 +1176,7 @@ function autoPlayOpponentMove() {
 }
 
 // ----------------------------------------------------
-// HOVER PREVIEW SYSTEM
+// HOVER PREVIEW SYSTEM (6th Black Move / Opponent Move)
 // ----------------------------------------------------
 let isHoverPreviewing = false;
 
@@ -957,58 +1197,70 @@ function previewCandidateMove(childNode) {
     }
   } catch (e) {}
 
-  renderBoardCustom(previewChess, moveSquares, `👁️ Previewing: ${childNode.san}`);
+  renderBoardCustom(previewChess, moveSquares, `👁️ PREVIEWING: ${childNode.san}`);
 }
 
-function previewVariationEnd(lineNodes, name) {
+function previewVariation6thBlackMove(lineNodes, name) {
   if (isPracticeMode) return;
   if (!lineNodes || lineNodes.length === 0) return;
-  const lastNode = lineNodes[lineNodes.length - 1];
-  if (!lastNode) return;
   isHoverPreviewing = true;
-  
-  let finalFen = lastNode.fen;
-  let moveSquares = [];
-  
-  if (lastNode.from && lastNode.to) {
-    moveSquares = [lastNode.from, lastNode.to];
-  }
 
-  // If fen missing or needed, simulate full sequence
-  if (!finalFen) {
-    const sim = new Chess();
-    for (let node of lineNodes) {
-      try {
-        const m = sim.move(node.san);
-        if (m) {
-          node.fen = sim.fen();
-          node.from = m.from;
-          node.to = m.to;
-          moveSquares = [m.from, m.to];
+  // Simulate moves to gather all black moves and exact positions
+  const blackMoves = [];
+  const sim = new Chess();
+
+  for (let idx = 0; idx < lineNodes.length; idx++) {
+    const node = lineNodes[idx];
+    const ply = idx + 1;
+    try {
+      const m = sim.move(node.san);
+      if (m) {
+        node.fen = sim.fen();
+        node.from = m.from;
+        node.to = m.to;
+        if (ply % 2 === 0) { // Black move (Opponent in White Repertoire)
+          blackMoves.push({
+            node: node,
+            ply: ply,
+            moveNumber: ply / 2,
+            fen: sim.fen(),
+            from: m.from,
+            to: m.to,
+            san: m.san
+          });
         }
-      } catch(e) {}
-    }
-    finalFen = sim.fen();
+      }
+    } catch(e) {}
   }
 
-  const previewChess = new Chess(finalFen);
-  const plyNum = lineNodes.length;
-  const moveNum = Math.ceil(plyNum / 2);
-  const movePrefix = plyNum % 2 === 1 ? `${moveNum}.` : `${moveNum}...`;
+  // Target the 6th black move (Move 6... Black) if available, or closest available black move
+  let target = null;
+  let targetLabel = "";
 
-  renderBoardCustom(previewChess, moveSquares, `👁️ End of Line: ${name} (${movePrefix} ${lastNode.san})`);
-}
+  if (blackMoves.length >= 6) {
+    target = blackMoves[5]; // 6th black move (index 5)
+    targetLabel = `6th Black Move (Move 6... ${target.san})`;
+  } else if (blackMoves.length > 0) {
+    target = blackMoves[blackMoves.length - 1];
+    targetLabel = `Black Move ${target.moveNumber}... ${target.san}`;
+  } else {
+    const last = lineNodes[lineNodes.length - 1];
+    target = { fen: last.fen || sim.fen(), from: last.from, to: last.to, san: last.san, ply: lineNodes.length };
+    targetLabel = `Move ${last.san}`;
+  }
 
-function cancelPreviewCandidateMove() {
-  if (!isHoverPreviewing) return;
-  isHoverPreviewing = false;
-  renderBoard();
-  document.getElementById('move-indicator').style.color = '#38bdf8';
-  document.getElementById('move-indicator').innerText = currentPly === 0 ? "Starting Position" : `Move ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${moveHistory[currentPly]?.san}`;
+  const previewChess = new Chess(target.fen);
+  const moveSquares = (target.from && target.to) ? [target.from, target.to] : [];
+
+  renderBoardCustom(previewChess, moveSquares, `👁️ PREVIEWING ${targetLabel} — ${name}`);
 }
 
 function cancelPreviewVariation() {
-  cancelPreviewCandidateMove();
+  if (!isHoverPreviewing) return;
+  isHoverPreviewing = false;
+  renderBoard();
+  document.getElementById('move-indicator').style.color = '#e63946';
+  document.getElementById('move-indicator').innerText = currentPly === 0 ? "STARTING POSITION" : `MOVE ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${moveHistory[currentPly]?.san}`;
 }
 
 function renderBoardCustom(customChess, customLastMoves = [], indicatorText = null) {
@@ -1060,7 +1312,7 @@ function renderBoardCustom(customChess, customLastMoves = [], indicatorText = nu
   document.getElementById('fen-display').innerText = customChess.fen();
   if (indicatorText) {
     document.getElementById('move-indicator').innerText = indicatorText;
-    document.getElementById('move-indicator').style.color = '#f59e0b';
+    document.getElementById('move-indicator').style.color = '#f4a261';
   }
 }
 
@@ -1242,8 +1494,8 @@ function renderLinesList() {
   container.innerHTML = '';
 
   if (decompiledLines.length === 0) {
-    countBadge.innerText = '0 Lines';
-    container.innerHTML = `<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px;">Load or paste a PGN above to decompile into playable branches.</div>`;
+    countBadge.innerText = '0 LINES';
+    container.innerHTML = `<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px; font-family:var(--font-mono);">Load or paste a PGN above to decompile into playable branches.</div>`;
     return;
   }
 
@@ -1251,13 +1503,13 @@ function renderLinesList() {
 
   if (activeSubsetBranch === null && branchGroups.length > 1) {
     // 1. Top-Level Variations / Branch Groups View
-    countBadge.innerText = `${branchGroups.length} Branches (${decompiledLines.length} Lines)`;
+    countBadge.innerText = `${branchGroups.length} BRANCHES (${decompiledLines.length} LINES)`;
     
     const headerNav = document.createElement('div');
     headerNav.className = 'subset-nav';
     headerNav.innerHTML = `
-      <span style="color:#94a3b8; font-weight:700; font-size:0.75rem;">📂 REPERTOIRE BRANCHES</span>
-      <span class="subset-badge">${branchGroups.length} Groups</span>
+      <span style="color:#ffffff; font-weight:700;">📂 REPERTOIRE BRANCHES</span>
+      <span class="subset-badge">${branchGroups.length} GROUPS</span>
     `;
     container.appendChild(headerNav);
 
@@ -1271,13 +1523,13 @@ function renderLinesList() {
       card.innerHTML = `
         <div class="line-header">
           <span class="line-title">${group.name}</span>
-          <span class="subset-badge">${group.indices.length} ${group.indices.length === 1 ? 'Line' : 'Sub-lines'}</span>
+          <span class="subset-badge">${group.indices.length} ${group.indices.length === 1 ? 'LINE' : 'SUB-LINES'}</span>
         </div>
         <div class="line-moves">${moveStrings}</div>
         ${group.indices.length > 1 ? `
           <div style="margin-top:6px; display:flex; align-items:center;">
             <button class="sub-branch-btn" onclick="openSubset(event, '${group.name.replace(/'/g, "\\'")}')">
-              📂 Click to explore ${group.indices.length} subset lines →
+              📂 EXPLORE ${group.indices.length} SUB-LINES →
             </button>
           </div>
         ` : ''}
@@ -1288,8 +1540,8 @@ function renderLinesList() {
         selectLine(group.indices[0]);
       };
 
-      // Hover shows the end of this variation
-      card.onmouseenter = () => previewVariationEnd(group.representativeNodes, group.name);
+      // Hover shows the 6th Black Move of this variation
+      card.onmouseenter = () => previewVariation6thBlackMove(group.representativeNodes, group.name);
       card.onmouseleave = () => cancelPreviewVariation();
 
       container.appendChild(card);
@@ -1302,17 +1554,17 @@ function renderLinesList() {
       indices: decompiledLines.map((_, i) => i)
     };
 
-    countBadge.innerText = `${currentGroup.indices.length} Subset Lines`;
+    countBadge.innerText = `${currentGroup.indices.length} SUBSET LINES`;
 
     if (branchGroups.length > 1) {
       const navBar = document.createElement('div');
       navBar.className = 'subset-nav';
       navBar.innerHTML = `
-        <div style="display:flex; align-items:center; gap:6px;">
-          <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:#1e293b;" onclick="clearSubsetFilter(event)">◀ All Branches</button>
-          <span style="font-weight:700; color:#38bdf8; font-size:0.75rem;">${currentGroup.name}</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn" style="padding:2px 8px; font-size:0.68rem;" onclick="clearSubsetFilter(event)">◀ ALL BRANCHES</button>
+          <span style="font-weight:700; color:var(--accent-red); font-size:0.75rem;">${currentGroup.name}</span>
         </div>
-        <span class="subset-badge">${currentGroup.indices.length} Lines</span>
+        <span class="subset-badge">${currentGroup.indices.length} LINES</span>
       `;
       container.appendChild(navBar);
     }
@@ -1328,7 +1580,7 @@ function renderLinesList() {
       card.innerHTML = `
         <div class="line-header">
           <span class="line-title">${name}</span>
-          <span>${lineNodes.length} plies</span>
+          <span>${lineNodes.length} PLIES</span>
         </div>
         <div class="line-moves">${moveStrings}</div>
       `;
@@ -1337,8 +1589,8 @@ function renderLinesList() {
         selectLine(idx);
       };
 
-      // Hover shows the last part of this decompiled line
-      card.onmouseenter = () => previewVariationEnd(lineNodes, name);
+      // Hover shows the 6th Black Move of this decompiled line
+      card.onmouseenter = () => previewVariation6thBlackMove(lineNodes, name);
       card.onmouseleave = () => cancelPreviewVariation();
 
       container.appendChild(card);
@@ -1486,8 +1738,8 @@ function updateToPly(ply) {
 
   renderBoard();
 
-  document.getElementById('move-indicator').style.color = '#38bdf8';
-  document.getElementById('move-indicator').innerText = ply === 0 ? "Starting Position" : `Move ${Math.ceil(ply/2)}${ply%2===0?'...':'.'} ${curr.san}`;
+  document.getElementById('move-indicator').style.color = '#e63946';
+  document.getElementById('move-indicator').innerText = ply === 0 ? "STARTING POSITION" : `MOVE ${Math.ceil(ply/2)}${ply%2===0?'...':'.'} ${curr.san}`;
   
   updateOpeningAndNoteDisplay();
   renderNotationHistory();
@@ -1503,7 +1755,8 @@ function renderNotationHistory() {
     const moveNum = Math.ceil(ply / 2);
     if (ply % 2 === 1) {
       const numSpan = document.createElement('span');
-      numSpan.style.color = '#64748b';
+      numSpan.style.color = '#555555';
+      numSpan.style.fontFamily = 'var(--font-mono)';
       numSpan.innerText = ` ${moveNum}. `;
       container.appendChild(numSpan);
     }
@@ -1525,119 +1778,106 @@ function renderCandidateBranches() {
   container.innerHTML = '';
 
   if (!currentTreeNode || !currentTreeNode.children || currentTreeNode.children.length === 0) {
-    countEl.innerText = '0';
-    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">End of prepared repertoire line.</div>';
+    countEl.innerText = "0";
+    container.innerHTML = `<div style="color:var(--text-muted); font-size:0.78rem; font-family:var(--font-mono);">Terminal position (End of prepared line).</div>`;
     return;
   }
 
   const children = currentTreeNode.children;
   countEl.innerText = children.length;
 
-  children.forEach((child) => {
-    const btn = document.createElement('div');
+  children.forEach(child => {
+    const btn = document.createElement('button');
     btn.className = 'candidate-btn';
-    
-    let sublineCount = 0;
-    function countLeaves(n) {
-      if (!n.children || n.children.length === 0) { sublineCount++; return; }
-      for (let c of n.children) countLeaves(c);
-    }
-    countLeaves(child);
 
-    btn.onmouseenter = () => previewCandidateMove(child);
-    btn.onmouseleave = () => cancelPreviewCandidateMove();
-    btn.onclick = () => {
-      cancelPreviewCandidateMove();
-      branchInto(child);
-    };
-
-    const noteSnippet = child.comment ? ` — "${child.comment}"` : '';
+    // Count how many decompiled terminal lines contain this child node
+    const matchingLinesCount = countTerminalLinesUnder(child);
+    const noteHint = child.comment ? ` — "${child.comment.slice(0, 30)}${child.comment.length > 30 ? '...' : ''}"` : '';
 
     btn.innerHTML = `
-      <div>
-        <div class="candidate-move">${child.san}</div>
-        <div style="font-size:0.72rem; color:#94a3b8;">${child.children.length > 0 ? 'Cont: ' + child.children[0].san : 'End of line'}${noteSnippet}</div>
-      </div>
-      <div class="candidate-meta">
-        <div style="color:var(--accent); font-weight:700;">${sublineCount} ${sublineCount===1?'Line':'Lines'}</div>
-        <div style="font-size:0.68rem; color:#64748b;">Click to branch &rarr;</div>
-      </div>
+      <span class="candidate-move">${child.san}</span>
+      <span class="candidate-meta">${matchingLinesCount} ${matchingLinesCount === 1 ? 'Line' : 'Lines'}${noteHint}</span>
     `;
+
+    // Click branches into this move
+    btn.onclick = () => {
+      cancelPreviewCandidateMove();
+      executeMove({ from: child.from, to: child.to, promotion: 'q' }) || executeCandidateSan(child.san);
+    };
+
+    // Hover previews position
+    btn.onmouseenter = () => previewCandidateMove(child);
+    btn.onmouseleave = () => cancelPreviewCandidateMove();
+
     container.appendChild(btn);
   });
 }
 
-function branchInto(targetChildNode) {
-  const currentPath = moveHistory.slice(1, currentPly + 1).map(m => m.node);
-  const targetPath = [...currentPath, targetChildNode];
+function executeCandidateSan(san) {
+  try {
+    const move = chess.move(san);
+    if (move) {
+      lastMoveSquares = [move.from, move.to];
+      errorSquare = null;
 
-  const matchIdx = decompiledLines.findIndex(line => {
-    if (line.length < targetPath.length) return false;
-    for (let i = 0; i < targetPath.length; i++) {
-      if (line[i] !== targetPath[i]) return false;
+      let matchingChild = currentTreeNode ? currentTreeNode.children.find(c => c.san === move.san) : null;
+      currentTreeNode = matchingChild;
+      currentPly++;
+
+      moveHistory = moveHistory.slice(0, currentPly);
+      moveHistory.push({
+        san: move.san,
+        fen: chess.fen(),
+        node: currentTreeNode,
+        comment: currentTreeNode ? currentTreeNode.comment : ""
+      });
+
+      updateOpeningAndNoteDisplay();
+      renderNotationHistory();
+      renderCandidateBranches();
+      renderBoard();
+
+      document.getElementById('move-indicator').innerText = `MOVE ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${move.san}`;
     }
-    return true;
-  });
-
-  if (matchIdx !== -1) {
-    activeLineIndex = matchIdx;
-    renderLinesList();
-    buildHistory(decompiledLines[matchIdx]);
-    updateToPly(currentPly + 1);
-  }
+  } catch(e) {}
 }
 
-function recordPlayerMove(move) {
-  // If move matches an existing branch child, branch into it
-  if (currentTreeNode && currentTreeNode.children) {
-    const matchChild = currentTreeNode.children.find(c => c.san === move.san);
-    if (matchChild) {
-      branchInto(matchChild);
+function countTerminalLinesUnder(node) {
+  if (!node.children || node.children.length === 0) return 1;
+  let count = 0;
+  function countDfs(n) {
+    if (!n.children || n.children.length === 0) {
+      count++;
       return;
     }
+    for (let c of n.children) countDfs(c);
   }
-
-  // Otherwise, dynamically add new branch to the tree!
-  const newNode = new TreeNode(move.san, currentTreeNode, currentPly + 1, chess.fen());
-  if (currentTreeNode) {
-    currentTreeNode.children.push(newNode);
-  }
-
-  moveHistory = moveHistory.slice(0, currentPly + 1);
-  moveHistory.push({ san: move.san, node: newNode, fen: chess.fen(), comment: "" });
-  currentPly++;
-  currentTreeNode = newNode;
-
-  // Re-extract decompiled lines to include new branch
-  decompiledLines = [];
-  function dfs(node, path) {
-    if (!node.children || node.children.length === 0) {
-      if (path.length > 0) decompiledLines.push(path);
-      return;
-    }
-    for (let child of node.children) dfs(child, [...path, child]);
-  }
-  dfs(treeRoot, []);
-  activeLineIndex = decompiledLines.length - 1;
-
-  renderLinesList();
-  updateOpeningAndNoteDisplay();
-  renderNotationHistory();
-  renderCandidateBranches();
+  countDfs(node);
+  return count;
 }
 
 // ----------------------------------------------------
 // NAVIGATION CONTROLS
 // ----------------------------------------------------
 function stepMove(delta) {
-  cancelPreviewCandidateMove();
-  const newPly = currentPly + delta;
-  if (newPly >= 0 && newPly < moveHistory.length) {
-    updateToPly(newPly);
+  if (isPracticeMode) return;
+  const targetPly = currentPly + delta;
+  if (targetPly >= 0 && targetPly < moveHistory.length) {
+    updateToPly(targetPly);
   }
 }
-function goToStart() { cancelPreviewCandidateMove(); updateToPly(0); }
-function goToEnd() { cancelPreviewCandidateMove(); updateToPly(moveHistory.length - 1); }
+
+function goToStart() {
+  if (isPracticeMode) return;
+  updateToPly(0);
+}
+
+function goToEnd() {
+  if (isPracticeMode) return;
+  if (moveHistory.length > 0) {
+    updateToPly(moveHistory.length - 1);
+  }
+}
 
 // ----------------------------------------------------
 // EXPORT & SAMPLE LOADERS
@@ -1660,28 +1900,39 @@ function handleFileUpload(e) {
 }
 
 function revertToOriginalPgn() {
-  if (!originalPgnRaw) return;
-  if (confirm("Revert all modifications and reload original imported PGN?")) {
-    decompilePgn(originalPgnRaw);
+  if (!originalPgnRaw) {
+    alert("No original PGN loaded to revert to.");
+    return;
   }
+  document.getElementById('pgn-input').value = originalPgnRaw;
+  decompilePgn(originalPgnRaw);
+  alert("Reverted to original PGN successfully!");
 }
 
 function exportCurrentLine() {
-  if (decompiledLines.length === 0) return;
-  const lineNodes = decompiledLines[activeLineIndex];
-  const movesStr = formatLineMoves(lineNodes, true); // includes {comments}
-  const opName = document.getElementById('opening-name-text').innerText;
-  const eco = document.getElementById('eco-code-text').innerText;
+  const lineNodes = decompiledLines[activeLineIndex] || [];
+  if (lineNodes.length === 0) {
+    alert("No active line selected to export.");
+    return;
+  }
 
-  const pgnExport = `[Event "${opName}"]\n[ECO "${eco}"]\n[Site "RepertoireBuilder"]\n[Result "*"]\n\n${movesStr} *`;
-  
-  const blob = new Blob([pgnExport], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `repertoire_${eco}_line_${activeLineIndex + 1}.pgn`;
+  const pgnStr = formatLineMoves(lineNodes, true);
+  const fullExport = `[Event "Repertoire Line Export"]
+[Site "Lawrence Cortes Repertoire Engine"]
+[Date "${new Date().toISOString().slice(0,10)}"]
+[ECO "${document.getElementById('eco-code-text').innerText}"]
+[Opening "${document.getElementById('opening-name-text').innerText}"]
+
+${pgnStr} *`;
+
+  const blob = new Blob([fullExport], { type: 'application/x-chess-pgn' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `repertoire_line_${activeLineIndex + 1}.pgn`;
   a.click();
+  URL.revokeObjectURL(url);
 }
 </script>
-
 </body>
 </html>
