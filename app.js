@@ -3527,15 +3527,29 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
 
   // Load Maia on-demand (first click only)
   if (!maiaReady) {
-    if (typeof ort === 'undefined') {
-      coachReset('onnxruntime-web not loaded yet. Please wait or check the console.');
-      return;
-    }
     coachReset('Loading Maia AI model (first time only). Please wait...');
-    initMaiaSession().then(function() {
-      if (maiaReady) startCoach();
-      else coachReset('Maia AI failed to load. Check console.');
-    });
+    function loadOrtAndInit() {
+      if (typeof ort === 'undefined') {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.min.js';
+        s.onload = function() {
+          initMaiaSession().then(function() {
+            if (maiaReady) startCoach();
+            else coachReset('Maia AI failed to load. Check console.');
+          });
+        };
+        s.onerror = function() {
+          coachReset('Failed to load ONNX runtime. Please check internet connection.');
+        };
+        document.head.appendChild(s);
+      } else {
+        initMaiaSession().then(function() {
+          if (maiaReady) startCoach();
+          else coachReset('Maia AI failed to load. Check console.');
+        });
+      }
+    }
+    loadOrtAndInit();
     return;
   }
 

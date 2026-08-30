@@ -1,0 +1,14 @@
+{
+  "name": "chess-coach-bot",
+  "version": "1.0.0",
+  "description": "Offline Chess Game Review & Virtual Coach with Stockfish NNUE, Maia AI, and Voice Narration",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "keywords": ["chess", "stockfish", "game-review", "chess-coach", "maia", "onnx", "wasm"],
+  "author": "",
+  "license": "MIT"
+}
