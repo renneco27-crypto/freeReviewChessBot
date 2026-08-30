@@ -141,6 +141,38 @@
     padding-right: 2px;
     min-height: 120px;
   }
+  .subset-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111c2e;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 6px 9px;
+    margin-bottom: 6px;
+    font-size: 0.74rem;
+  }
+  .subset-badge {
+    background: #0284c7;
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+  }
+  .sub-branch-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    font-size: 0.68rem;
+    color: #38bdf8;
+    background: #0b1726;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: 600;
+  }
   .line-card {
     background: #0f1520;
     border: 1px solid var(--border);
@@ -149,7 +181,7 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  .line-card:hover { border-color: var(--accent); background: #172131; }
+  .line-card:hover { border-color: var(--accent); background: #172131; transform: translateX(2px); }
   .line-card.active { border-color: var(--accent); background: #172a45; box-shadow: 0 0 0 1px var(--accent); }
   .line-header { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; }
   .line-title { font-weight: 700; color: var(--accent); font-size: 0.78rem; }
@@ -799,13 +831,19 @@ function togglePracticeMode() {
     btn.innerText = "⏹ Exit Practice";
     alertBox.style.display = "flex";
     
-    // Determine user color from repertoire line or starting side
-    practiceUserSide = 'w';
-    goToStart();
+    // Practice starts directly from CURRENT position in the Active Line!
+    practiceUserSide = chess.turn();
+    errorSquare = null;
     
-    // If black repertoire, auto-play move 1
-    if (practiceUserSide === 'b' && chess.turn() === 'w') {
-      autoPlayOpponentMove();
+    const lineNodes = decompiledLines[activeLineIndex] || [];
+    const moveNumber = Math.ceil((currentPly + 1) / 2);
+    const turnStr = practiceUserSide === 'w' ? 'White' : 'Black';
+    
+    if (currentPly >= lineNodes.length) {
+      document.getElementById('practice-status-text').innerText = `⚠️ Line already at final move! Go to an earlier move in notation to practice.`;
+    } else {
+      document.getElementById('practice-status-text').innerText = 
+        `🎯 Practicing from Move ${moveNumber} (${turnStr}) to end of line (${lineNodes.length} plies total). Play next move from memory!`;
     }
   } else {
     btn.className = "btn btn-success";
@@ -835,7 +873,7 @@ function handlePracticeUserMove(move) {
 
     // Check if line complete
     if (currentPly >= lineNodes.length) {
-      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized)`;
+      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized from this position)`;
       return;
     }
 
@@ -878,6 +916,10 @@ function autoPlayOpponentMove() {
         updateOpeningAndNoteDisplay();
         renderNotationHistory();
         renderBoard();
+
+        if (currentPly >= lineNodes.length) {
+          document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed!`;
+        }
       }
     } catch (e) {
       console.error("Opponent autoplay error", e);
@@ -910,12 +952,39 @@ function previewCandidateMove(childNode) {
   renderBoardCustom(previewChess, moveSquares, `👁️ Previewing: ${childNode.san}`);
 }
 
+function previewVariationEnd(lineNodes, name) {
+  if (isPracticeMode) return;
+  if (!lineNodes || lineNodes.length === 0) return;
+  const lastNode = lineNodes[lineNodes.length - 1];
+  if (!lastNode || !lastNode.fen) return;
+  isHoverPreviewing = true;
+  
+  const previewChess = new Chess(lastNode.fen);
+  
+  let moveSquares = [];
+  if (lineNodes.length >= 2) {
+    try {
+      const prevFen = lineNodes[lineNodes.length - 2].fen;
+      const prevChess = new Chess(prevFen);
+      const legal = prevChess.moves({ verbose: true });
+      const moveMatch = legal.find(m => m.san === lastNode.san);
+      if (moveMatch) moveSquares = [moveMatch.from, moveMatch.to];
+    } catch(e) {}
+  }
+
+  renderBoardCustom(previewChess, moveSquares, `👁️ End of Line Preview: ${name} (${lastNode.san} - Ply ${lineNodes.length})`);
+}
+
 function cancelPreviewCandidateMove() {
   if (!isHoverPreviewing) return;
   isHoverPreviewing = false;
   renderBoard();
   document.getElementById('move-indicator').style.color = '#38bdf8';
   document.getElementById('move-indicator').innerText = currentPly === 0 ? "Starting Position" : `Move ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${moveHistory[currentPly]?.san}`;
+}
+
+function cancelPreviewVariation() {
+  cancelPreviewCandidateMove();
 }
 
 function renderBoardCustom(customChess, customLastMoves = [], indicatorText = null) {
@@ -1066,32 +1135,140 @@ function decompilePgn(rawText) {
   }
 }
 
+let activeSubsetBranch = null;
+
+function getTopLevelBranchGroups() {
+  const groups = {};
+  decompiledLines.forEach((lineNodes, idx) => {
+    const fullMovesStr = formatLineMoves(lineNodes);
+    const branchName = classifyOpeningName(fullMovesStr, idx + 1);
+    
+    if (!groups[branchName]) {
+      groups[branchName] = {
+        name: branchName,
+        indices: [],
+        representativeNodes: lineNodes
+      };
+    }
+    groups[branchName].indices.push(idx);
+  });
+  return Object.values(groups);
+}
+
 function renderLinesList() {
   const container = document.getElementById('lines-list');
   const countBadge = document.getElementById('line-count-badge');
   const totalCount = document.getElementById('total-lines-count');
 
-  countBadge.innerText = `${decompiledLines.length} Lines`;
   totalCount.innerText = decompiledLines.length;
   container.innerHTML = '';
 
-  decompiledLines.forEach((lineNodes, idx) => {
-    const card = document.createElement('div');
-    card.className = `line-card ${idx === activeLineIndex ? 'active' : ''}`;
-    card.onclick = () => selectLine(idx);
+  if (decompiledLines.length === 0) {
+    countBadge.innerText = '0 Lines';
+    container.innerHTML = `<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px;">Load or paste a PGN above to decompile into playable branches.</div>`;
+    return;
+  }
 
-    const moveStrings = formatLineMoves(lineNodes);
-    const name = classifyOpeningName(moveStrings, idx + 1);
+  const branchGroups = getTopLevelBranchGroups();
 
-    card.innerHTML = `
-      <div class="line-header">
-        <span class="line-title">${name}</span>
-        <span>${lineNodes.length} plies</span>
-      </div>
-      <div class="line-moves">${moveStrings}</div>
+  if (activeSubsetBranch === null && branchGroups.length > 1) {
+    // 1. Top-Level Variations / Branch Groups View (so not all 18 lines are shown at once)
+    countBadge.innerText = `${branchGroups.length} Branches (${decompiledLines.length} Lines)`;
+    
+    const headerNav = document.createElement('div');
+    headerNav.className = 'subset-nav';
+    headerNav.innerHTML = `
+      <span style="color:#94a3b8; font-weight:700; font-size:0.75rem;">📂 REPERTOIRE BRANCHES</span>
+      <span class="subset-badge">${branchGroups.length} Groups</span>
     `;
-    container.appendChild(card);
-  });
+    container.appendChild(headerNav);
+
+    branchGroups.forEach(group => {
+      const card = document.createElement('div');
+      const isGroupActive = group.indices.includes(activeLineIndex);
+      card.className = `line-card ${isGroupActive ? 'active' : ''}`;
+      
+      const moveStrings = formatLineMoves(group.representativeNodes.slice(0, 8)) + (group.representativeNodes.length > 8 ? ' ...' : '');
+
+      card.innerHTML = `
+        <div class="line-header">
+          <span class="line-title">${group.name}</span>
+          <span class="subset-badge">${group.indices.length} ${group.indices.length === 1 ? 'Line' : 'Sub-lines'}</span>
+        </div>
+        <div class="line-moves">${moveStrings}</div>
+        <div class="sub-branch-tag">
+          <span>Click to explore ${group.indices.length} subset lines →</span>
+        </div>
+      `;
+
+      card.onclick = () => {
+        activeSubsetBranch = group.name;
+        selectLine(group.indices[0]);
+        renderLinesList();
+      };
+
+      // Hover shows the end of this variation
+      card.onmouseenter = () => previewVariationEnd(group.representativeNodes, group.name);
+      card.onmouseleave = () => cancelPreviewVariation();
+
+      container.appendChild(card);
+    });
+
+  } else {
+    // 2. Subset Variations View (showing only the lines under this selected branch)
+    const currentGroup = branchGroups.find(g => g.name === activeSubsetBranch) || {
+      name: 'All Variations',
+      indices: decompiledLines.map((_, i) => i)
+    };
+
+    countBadge.innerText = `${currentGroup.indices.length} Subset Lines`;
+
+    if (branchGroups.length > 1) {
+      const navBar = document.createElement('div');
+      navBar.className = 'subset-nav';
+      navBar.innerHTML = `
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:#1e293b;" onclick="clearSubsetFilter()">◀ All Branches</button>
+          <span style="font-weight:700; color:#38bdf8; font-size:0.75rem;">${currentGroup.name}</span>
+        </div>
+        <span class="subset-badge">${currentGroup.indices.length} Lines</span>
+      `;
+      container.appendChild(navBar);
+    }
+
+    currentGroup.indices.forEach(idx => {
+      const lineNodes = decompiledLines[idx];
+      const card = document.createElement('div');
+      card.className = `line-card ${idx === activeLineIndex ? 'active' : ''}`;
+      
+      const moveStrings = formatLineMoves(lineNodes);
+      const name = classifyOpeningName(moveStrings, idx + 1);
+
+      card.innerHTML = `
+        <div class="line-header">
+          <span class="line-title">${name} (Line #${idx + 1})</span>
+          <span>${lineNodes.length} plies</span>
+        </div>
+        <div class="line-moves">${moveStrings}</div>
+      `;
+
+      card.onclick = () => {
+        selectLine(idx);
+        renderLinesList();
+      };
+
+      // Hover shows the last part of this decompiled line
+      card.onmouseenter = () => previewVariationEnd(lineNodes, name);
+      card.onmouseleave = () => cancelPreviewVariation();
+
+      container.appendChild(card);
+    });
+  }
+}
+
+function clearSubsetFilter() {
+  activeSubsetBranch = null;
+  renderLinesList();
 }
 
 function formatLineMoves(nodes, includeComments = false) {
@@ -1114,11 +1291,11 @@ function formatLineMoves(nodes, includeComments = false) {
 }
 
 function classifyOpeningName(moveStr, index) {
-  if (moveStr.includes('Bc5')) return 'Scotch: Classical (4...Bc5)';
-  if (moveStr.includes('Bb4')) return 'Scotch: Mieses / Bb4+';
-  if (moveStr.includes('Nxd4 5. Qxd4')) return 'Scotch: 4...Nxd4 5. Qxd4';
+  if (moveStr.includes('Bc5') || moveStr.includes('4... Bc5')) return 'Scotch: Classical (4...Bc5)';
+  if (moveStr.includes('Bb4') || moveStr.includes('4... Bb4+')) return 'Scotch: Mieses / Bb4+';
+  if (moveStr.includes('Nxd4 5. Qxd4') || moveStr.includes('4... Nxd4')) return 'Scotch: 4...Nxd4 5. Qxd4';
   if (moveStr.includes('3... d6')) return 'Scotch: 3...d6 Philidor';
-  if (moveStr.includes('3... Nf6')) return 'Scotch: Two Knights Counter';
+  if (moveStr.includes('3... Nf6') || moveStr.includes('Nf6 4. Nxc6') || moveStr.includes('4... Nf6')) return 'Scotch: Two Knights Counter';
   if (moveStr.includes('3... f6')) return 'Scotch: 3...f6';
   if (moveStr.includes('3... d5')) return 'Scotch: 3...d5 Gambit';
   return `Variation ${index}`;
