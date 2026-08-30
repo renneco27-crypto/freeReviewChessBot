@@ -141,6 +141,46 @@
     padding-right: 2px;
     min-height: 120px;
   }
+  .subset-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111c2e;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 6px 9px;
+    margin-bottom: 6px;
+    font-size: 0.74rem;
+  }
+  .subset-badge {
+    background: #0284c7;
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+  }
+  .sub-branch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+    font-size: 0.7rem;
+    color: #38bdf8;
+    background: #0d1e33;
+    border: 1px solid #1e40af;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sub-branch-btn:hover {
+    background: #0284c7;
+    color: white;
+    border-color: #38bdf8;
+    transform: scale(1.02);
+  }
   .line-card {
     background: #0f1520;
     border: 1px solid var(--border);
@@ -799,13 +839,19 @@ function togglePracticeMode() {
     btn.innerText = "⏹ Exit Practice";
     alertBox.style.display = "flex";
     
-    // Determine user color from repertoire line or starting side
-    practiceUserSide = 'w';
-    goToStart();
+    // Practice starts directly from CURRENT position in the Active Line!
+    practiceUserSide = chess.turn();
+    errorSquare = null;
     
-    // If black repertoire, auto-play move 1
-    if (practiceUserSide === 'b' && chess.turn() === 'w') {
-      autoPlayOpponentMove();
+    const lineNodes = decompiledLines[activeLineIndex] || [];
+    const moveNumber = Math.ceil((currentPly + 1) / 2);
+    const turnStr = practiceUserSide === 'w' ? 'White' : 'Black';
+    
+    if (currentPly >= lineNodes.length) {
+      document.getElementById('practice-status-text').innerText = `⚠️ Line already at final move! Go to an earlier move in notation to practice.`;
+    } else {
+      document.getElementById('practice-status-text').innerText = 
+        `🎯 Practicing from Move ${moveNumber} (${turnStr}) to end of line (${lineNodes.length} plies total). Play next move from memory!`;
     }
   } else {
     btn.className = "btn btn-success";
@@ -835,7 +881,7 @@ function handlePracticeUserMove(move) {
 
     // Check if line complete
     if (currentPly >= lineNodes.length) {
-      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized)`;
+      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized from this position)`;
       return;
     }
 
@@ -878,6 +924,10 @@ function autoPlayOpponentMove() {
         updateOpeningAndNoteDisplay();
         renderNotationHistory();
         renderBoard();
+
+        if (currentPly >= lineNodes.length) {
+          document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed!`;
+        }
       }
     } catch (e) {
       console.error("Opponent autoplay error", e);
@@ -910,12 +960,55 @@ function previewCandidateMove(childNode) {
   renderBoardCustom(previewChess, moveSquares, `👁️ Previewing: ${childNode.san}`);
 }
 
+function previewVariationEnd(lineNodes, name) {
+  if (isPracticeMode) return;
+  if (!lineNodes || lineNodes.length === 0) return;
+  const lastNode = lineNodes[lineNodes.length - 1];
+  if (!lastNode) return;
+  isHoverPreviewing = true;
+  
+  let finalFen = lastNode.fen;
+  let moveSquares = [];
+  
+  if (lastNode.from && lastNode.to) {
+    moveSquares = [lastNode.from, lastNode.to];
+  }
+
+  // If fen missing or needed, simulate full sequence
+  if (!finalFen) {
+    const sim = new Chess();
+    for (let node of lineNodes) {
+      try {
+        const m = sim.move(node.san);
+        if (m) {
+          node.fen = sim.fen();
+          node.from = m.from;
+          node.to = m.to;
+          moveSquares = [m.from, m.to];
+        }
+      } catch(e) {}
+    }
+    finalFen = sim.fen();
+  }
+
+  const previewChess = new Chess(finalFen);
+  const plyNum = lineNodes.length;
+  const moveNum = Math.ceil(plyNum / 2);
+  const movePrefix = plyNum % 2 === 1 ? `${moveNum}.` : `${moveNum}...`;
+
+  renderBoardCustom(previewChess, moveSquares, `👁️ End of Line: ${name} (${movePrefix} ${lastNode.san})`);
+}
+
 function cancelPreviewCandidateMove() {
   if (!isHoverPreviewing) return;
   isHoverPreviewing = false;
   renderBoard();
   document.getElementById('move-indicator').style.color = '#38bdf8';
   document.getElementById('move-indicator').innerText = currentPly === 0 ? "Starting Position" : `Move ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${moveHistory[currentPly]?.san}`;
+}
+
+function cancelPreviewVariation() {
+  cancelPreviewCandidateMove();
 }
 
 function renderBoardCustom(customChess, customLastMoves = [], indicatorText = null) {
@@ -975,13 +1068,15 @@ function renderBoardCustom(customChess, customLastMoves = [], indicatorText = nu
 // PGN MULTI-VARIATION TREE DECOMPILER
 // ----------------------------------------------------
 class TreeNode {
-  constructor(san = null, parent = null, ply = 0, fen = "", comment = "") {
+  constructor(san = null, parent = null, ply = 0, fen = "", comment = "", from = null, to = null) {
     this.san = san;
     this.parent = parent;
     this.children = [];
     this.comment = comment;
     this.ply = ply;
     this.fen = fen;
+    this.from = from;
+    this.to = to;
   }
 }
 
@@ -1027,16 +1122,21 @@ function decompilePgn(rawText) {
     } else if (token.type === 'comment' && token.val) {
       if (curr) curr.comment = token.val.replace(/^\{|\}$/g, '').trim();
     } else if (token.type === 'san' && token.val) {
+      let sanMove = token.val.replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
       const branchSim = new Chess(curr.fen);
       try {
-        const m = branchSim.move(token.val);
+        const m = branchSim.move(sanMove);
         if (m) {
-          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen());
+          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen(), "", m.from, m.to);
+          curr.children.push(node);
+          stack[stack.length - 1] = node;
+        } else {
+          const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
           curr.children.push(node);
           stack[stack.length - 1] = node;
         }
       } catch (err) {
-        const node = new TreeNode(token.val, curr, curr.ply + 1, curr.fen);
+        const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
         curr.children.push(node);
         stack[stack.length - 1] = node;
       }
@@ -1066,32 +1166,158 @@ function decompilePgn(rawText) {
   }
 }
 
+let activeSubsetBranch = null;
+
+function getTopLevelBranchGroups() {
+  const groups = {};
+  decompiledLines.forEach((lineNodes, idx) => {
+    const fullMovesStr = formatLineMoves(lineNodes);
+    let categoryName = "Scotch Game Main";
+    
+    if (fullMovesStr.includes('Bc5') || fullMovesStr.includes('4... Bc5')) categoryName = 'Scotch: Classical (4...Bc5)';
+    else if (fullMovesStr.includes('Bb4+') || fullMovesStr.includes('4... Bb4+')) categoryName = 'Scotch: Mieses / Bb4+';
+    else if (fullMovesStr.includes('4... Nxd4 5. Qxd4') || fullMovesStr.includes('Nxd4 5. Qxd4')) categoryName = 'Scotch: 4...Nxd4 5. Qxd4';
+    else if (fullMovesStr.includes('3... d6')) categoryName = 'Scotch: 3...d6 Philidor';
+    else if (fullMovesStr.includes('3... Nf6') || fullMovesStr.includes('4... Nf6')) categoryName = 'Scotch: Two Knights Counter';
+    else if (fullMovesStr.includes('3... f6')) categoryName = 'Scotch: 3...f6';
+    else if (fullMovesStr.includes('3... d5')) categoryName = 'Scotch: 3...d5 Gambit';
+    else if (fullMovesStr.includes('3... Bb4+')) categoryName = 'Scotch: 3...Bb4+';
+    else if (fullMovesStr.includes('3... Nxd4')) categoryName = 'Scotch: 3...Nxd4';
+    else categoryName = `Branch Group ${idx + 1}`;
+    
+    if (!groups[categoryName]) {
+      groups[categoryName] = {
+        name: categoryName,
+        indices: [],
+        representativeNodes: lineNodes
+      };
+    }
+    groups[categoryName].indices.push(idx);
+  });
+  return Object.values(groups);
+}
+
+function openSubset(e, branchName) {
+  if (e) e.stopPropagation();
+  activeSubsetBranch = branchName;
+  renderLinesList();
+}
+
+function clearSubsetFilter(e) {
+  if (e) e.stopPropagation();
+  activeSubsetBranch = null;
+  renderLinesList();
+}
+
 function renderLinesList() {
   const container = document.getElementById('lines-list');
   const countBadge = document.getElementById('line-count-badge');
   const totalCount = document.getElementById('total-lines-count');
 
-  countBadge.innerText = `${decompiledLines.length} Lines`;
   totalCount.innerText = decompiledLines.length;
   container.innerHTML = '';
 
-  decompiledLines.forEach((lineNodes, idx) => {
-    const card = document.createElement('div');
-    card.className = `line-card ${idx === activeLineIndex ? 'active' : ''}`;
-    card.onclick = () => selectLine(idx);
+  if (decompiledLines.length === 0) {
+    countBadge.innerText = '0 Lines';
+    container.innerHTML = `<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px;">Load or paste a PGN above to decompile into playable branches.</div>`;
+    return;
+  }
 
-    const moveStrings = formatLineMoves(lineNodes);
-    const name = classifyOpeningName(moveStrings, idx + 1);
+  const branchGroups = getTopLevelBranchGroups();
 
-    card.innerHTML = `
-      <div class="line-header">
-        <span class="line-title">${name}</span>
-        <span>${lineNodes.length} plies</span>
-      </div>
-      <div class="line-moves">${moveStrings}</div>
+  if (activeSubsetBranch === null && branchGroups.length > 1) {
+    // 1. Top-Level Variations / Branch Groups View
+    countBadge.innerText = `${branchGroups.length} Branches (${decompiledLines.length} Lines)`;
+    
+    const headerNav = document.createElement('div');
+    headerNav.className = 'subset-nav';
+    headerNav.innerHTML = `
+      <span style="color:#94a3b8; font-weight:700; font-size:0.75rem;">📂 REPERTOIRE BRANCHES</span>
+      <span class="subset-badge">${branchGroups.length} Groups</span>
     `;
-    container.appendChild(card);
-  });
+    container.appendChild(headerNav);
+
+    branchGroups.forEach(group => {
+      const card = document.createElement('div');
+      const isGroupActive = group.indices.includes(activeLineIndex);
+      card.className = `line-card ${isGroupActive ? 'active' : ''}`;
+      
+      const moveStrings = formatLineMoves(group.representativeNodes.slice(0, 8)) + (group.representativeNodes.length > 8 ? ' ...' : '');
+
+      card.innerHTML = `
+        <div class="line-header">
+          <span class="line-title">${group.name}</span>
+          <span class="subset-badge">${group.indices.length} ${group.indices.length === 1 ? 'Line' : 'Sub-lines'}</span>
+        </div>
+        <div class="line-moves">${moveStrings}</div>
+        ${group.indices.length > 1 ? `
+          <button class="sub-branch-btn" onclick="openSubset(event, '${group.name.replace(/'/g, "\\'")}')">
+            📂 Click to explore ${group.indices.length} subset lines →
+          </button>
+        ` : ''}
+      `;
+
+      // Clicking the card selects and plays that variation normally
+      card.onclick = () => {
+        selectLine(group.indices[0]);
+      };
+
+      // Hover shows the end of this variation
+      card.onmouseenter = () => previewVariationEnd(group.representativeNodes, group.name);
+      card.onmouseleave = () => cancelPreviewVariation();
+
+      container.appendChild(card);
+    });
+
+  } else {
+    // 2. Subset Variations View (showing only the lines under this selected branch)
+    const currentGroup = branchGroups.find(g => g.name === activeSubsetBranch) || {
+      name: 'All Variations',
+      indices: decompiledLines.map((_, i) => i)
+    };
+
+    countBadge.innerText = `${currentGroup.indices.length} Subset Lines`;
+
+    if (branchGroups.length > 1) {
+      const navBar = document.createElement('div');
+      navBar.className = 'subset-nav';
+      navBar.innerHTML = `
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:#1e293b;" onclick="clearSubsetFilter(event)">◀ All Branches</button>
+          <span style="font-weight:700; color:#38bdf8; font-size:0.75rem;">${currentGroup.name}</span>
+        </div>
+        <span class="subset-badge">${currentGroup.indices.length} Lines</span>
+      `;
+      container.appendChild(navBar);
+    }
+
+    currentGroup.indices.forEach(idx => {
+      const lineNodes = decompiledLines[idx];
+      const card = document.createElement('div');
+      card.className = `line-card ${idx === activeLineIndex ? 'active' : ''}`;
+      
+      const moveStrings = formatLineMoves(lineNodes);
+      const name = classifyOpeningName(moveStrings, idx + 1);
+
+      card.innerHTML = `
+        <div class="line-header">
+          <span class="line-title">${name}</span>
+          <span>${lineNodes.length} plies</span>
+        </div>
+        <div class="line-moves">${moveStrings}</div>
+      `;
+
+      card.onclick = () => {
+        selectLine(idx);
+      };
+
+      // Hover shows the last part of this decompiled line
+      card.onmouseenter = () => previewVariationEnd(lineNodes, name);
+      card.onmouseleave = () => cancelPreviewVariation();
+
+      container.appendChild(card);
+    });
+  }
 }
 
 function formatLineMoves(nodes, includeComments = false) {
@@ -1114,14 +1340,30 @@ function formatLineMoves(nodes, includeComments = false) {
 }
 
 function classifyOpeningName(moveStr, index) {
-  if (moveStr.includes('Bc5')) return 'Scotch: Classical (4...Bc5)';
-  if (moveStr.includes('Bb4')) return 'Scotch: Mieses / Bb4+';
-  if (moveStr.includes('Nxd4 5. Qxd4')) return 'Scotch: 4...Nxd4 5. Qxd4';
-  if (moveStr.includes('3... d6')) return 'Scotch: 3...d6 Philidor';
-  if (moveStr.includes('3... Nf6')) return 'Scotch: Two Knights Counter';
-  if (moveStr.includes('3... f6')) return 'Scotch: 3...f6';
-  if (moveStr.includes('3... d5')) return 'Scotch: 3...d5 Gambit';
-  return `Variation ${index}`;
+  let base = `Variation ${index}`;
+  if (moveStr.includes('4... Bc5') || moveStr.includes('Bc5')) base = 'Scotch: Classical (4...Bc5)';
+  else if (moveStr.includes('4... Bb4+') || moveStr.includes('Bb4')) base = 'Scotch: Mieses / Bb4+';
+  else if (moveStr.includes('4... Nxd4') || moveStr.includes('Nxd4 5. Qxd4')) base = 'Scotch: 4...Nxd4 5. Qxd4';
+  else if (moveStr.includes('3... d6')) base = 'Scotch: 3...d6 Philidor';
+  else if (moveStr.includes('3... Nf6') || moveStr.includes('4... Nf6')) base = 'Scotch: Two Knights Counter';
+  else if (moveStr.includes('3... f6')) base = 'Scotch: 3...f6';
+  else if (moveStr.includes('3... d5')) base = 'Scotch: 3...d5 Gambit';
+  else if (moveStr.includes('3... Bb4+')) base = 'Scotch: 3...Bb4+';
+  else if (moveStr.includes('3... Nxd4')) base = 'Scotch: 3...Nxd4';
+
+  if (moveStr.includes('Qxc5+')) return `${base} → 19. Qxc5+`;
+  if (moveStr.includes('18. Qd3')) return `${base} → 18. Qd3`;
+  if (moveStr.includes('16. Ne4')) return `${base} → 16. Ne4`;
+  if (moveStr.includes('6. e5 Nh5 7. g4')) return `${base} → 7. g4`;
+  if (moveStr.includes('23. Bxe6')) return `${base} → 23. Bxe6`;
+  if (moveStr.includes('21. Nd2')) return `${base} → 21. Nd2`;
+  if (moveStr.includes('14. g4')) return `${base} → 14. g4`;
+  if (moveStr.includes('10. O-O')) return `${base} → 10. O-O`;
+  if (moveStr.includes('8. Qd5')) return `${base} → 8. Qd5`;
+  if (moveStr.includes('11. Qxc5')) return `${base} → 11. Qxc5`;
+  if (moveStr.includes('7. a5')) return `${base} → 7. a5`;
+
+  return base;
 }
 
 // ----------------------------------------------------
