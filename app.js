@@ -1406,8 +1406,8 @@ function parseLines(lines) {
 
 function toCp(line) {
   if (!line) return 0;
-  if (line.mateIn !== null) return line.mateIn > 0 ? 100000 - line.mateIn : -100000 - line.mateIn;
-  return line.cp || 0;
+  if (typeof line.mateIn === 'number') return line.mateIn > 0 ? 100000 - line.mateIn : -100000 - line.mateIn;
+  return typeof line.cp === 'number' ? line.cp : 0;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1425,14 +1425,18 @@ function getThresh(c, prevCp) {
 
 function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore) {
   if (!topBefore || !afterLine) return 'good';
-  var afterNeg = { cp: afterLine.cp !== null ? -afterLine.cp : null, mateIn: afterLine.mateIn !== null ? -afterLine.mateIn : null };
+  var afterNeg = {
+    move: afterLine.move,
+    cp: typeof afterLine.cp === 'number' ? -afterLine.cp : null,
+    mateIn: typeof afterLine.mateIn === 'number' ? -afterLine.mateIn : null
+  };
   var evBefore = toCp(topBefore), evAfter = toCp(afterNeg);
   var delta = Math.max(0, evBefore - evAfter), prevCp = topBefore.cp || 0;
   var onlyMove = secondBefore && (toCp(topBefore) - toCp(secondBefore)) >= 350;
 
-  if (afterNeg.mateIn !== null) {
+  if (typeof afterNeg.mateIn === 'number') {
     if (afterNeg.mateIn < 0) return 'blunder';
-    if (afterNeg.mateIn > 0) return 'brilliant';
+    if (afterNeg.mateIn > 0 && evBefore < 50000) return 'best';
   }
 
   if (playedUci === topBefore.move) return onlyMove ? 'great' : 'best';
@@ -1442,8 +1446,6 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
 
   // LOSING CAPTURE OVERRIDE: if we moved onto a defended square and lost significant
   // material (net >= 4 pawns), it's a blunder regardless of eval-delta thresholds.
-  // This catches e.g. queen takes defended bishop — eval may only shift "moderately"
-  // yet we're down a queen for a bishop (~5 pawns net), which is always a blunder.
   if (boardBefore && delta >= 200) {
     var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
     var movingPiece = boardBefore.get(from);
@@ -1454,9 +1456,8 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
       var captureVal  = PIECE_VAL[capturedPiece.type] || 0;
       var opponentColor = movingPiece.color === 'w' ? 'b' : 'w';
       var squareDefended = boardBefore.isSquareAttacked(to, opponentColor);
-      // Net material: we gain captureVal but lose attackerVal if square is defended
       var netLoss = squareDefended ? (attackerVal - captureVal) : 0;
-      if (netLoss >= 4) return 'blunder'; // e.g. queen (9) - bishop (3) = 6 net loss
+      if (netLoss >= 4) return 'blunder';
     }
   }
 
@@ -1477,10 +1478,10 @@ function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore) {
 
   var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
   var piece = boardBefore.get(from);
-  if (!piece || piece.type === 'p') return false;
+  if (!piece || piece.type === 'p' || piece.type === 'k') return false; // Pawns and Kings (castling) cannot be brilliant sacrifices
   if (evBefore >= WINNING_THRESHOLD || evBefore <= -WINNING_THRESHOLD) return false;
   var gain = evAfter - evBefore;
-  if (gain < BRILLIANT_GAIN_CP) return false;
+  if (isNaN(gain) || gain < BRILLIANT_GAIN_CP) return false;
   var opponentColor = piece.color === 'w' ? 'b' : 'w';
   if (!boardBefore.isSquareAttacked(to, opponentColor)) return false;
   if (boardBefore.isSquareAttacked(to, piece.color)) return false;
@@ -3695,12 +3696,82 @@ function doSync() {
     });
 }
 
+// ── Settings Modal ──
+var settingsModal = document.getElementById('settingsModal');
+document.getElementById('settingsToggleBtn').addEventListener('click', function() {
+  settingsModal.style.display = 'flex';
+});
+document.getElementById('settingsCloseBtn').addEventListener('click', function() {
+  settingsModal.style.display = 'none';
+});
+window.addEventListener('click', function(e) {
+  if (e.target === settingsModal) settingsModal.style.display = 'none';
+});
+
+// ── Import Tabs ──
+function switchImportTab(paneId, activeTabId) {
+  ['paneChesscom', 'panePgn', 'paneFen'].forEach(function(p) {
+    document.getElementById(p).style.display = (p === paneId) ? 'flex' : 'none';
+  });
+  ['importTabChesscom', 'importTabPgn', 'importTabFen'].forEach(function(t) {
+    document.getElementById(t).classList.toggle('active', t === activeTabId);
+  });
+}
+document.getElementById('importTabChesscom').addEventListener('click', function() { switchImportTab('paneChesscom', 'importTabChesscom'); });
+document.getElementById('importTabPgn').addEventListener('click', function() { switchImportTab('panePgn', 'importTabPgn'); });
+document.getElementById('importTabFen').addEventListener('click', function() { switchImportTab('paneFen', 'importTabFen'); });
+
+// ── First / Last Move Navigation ──
+document.getElementById('firstMoveBtn').addEventListener('click', function() {
+  if (!moveHistory || moveHistory.length === 0) return;
+  navIdx = -1;
+  updateNavDisplay();
+});
+document.getElementById('lastMoveBtn').addEventListener('click', function() {
+  if (!moveHistory || moveHistory.length === 0) return;
+  navIdx = moveHistory.length - 1;
+  updateNavDisplay();
+});
+
+// ── Sample Games ──
+var KASPAROV_PGN = '[Event "Wijk aan Zee"]\n[White "Garry Kasparov"]\n[Black "Veselin Topalov"]\n[Result "1-0"]\n[ECO "B07"]\n\n1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. Be3 Bg7 5. Qd2 c6 6. f3 b5 7. Nge2 Nbd7 8. Bh6 Bxh6 9. Qxh6 Bb7 10. a3 e5 11. O-O-O Qe7 12. Kb1 a6 13. Nc1 O-O-O 14. Nb3 exd4 15. Rxd4 c5 16. Rd1 Nb6 17. g3 Kb8 18. Na5 Ba8 19. Bh3 d5 20. Qf4+ Ka7 21. Rhe1 d4 22. Nd5 Nbxd5 23. exd5 Qd6 24. Rxd4 cxd4 25. Re7+ Kb6 26. Qxd4+ Kxa5 27. b4+ Ka4 28. Qc3 Qxd5 29. Ra7 Bb7 30. Rxb7 Qc4 31. Qxf6 Kxa3 32. Qxa6+ Kxb4 33. c3+ Kxc3 34. Qa1+ Kd2 35. Qb2+ Kd1 36. Bf1 Rd2 37. Rd7 Rxd7 38. Bxc4 bxc4 39. Qxh8 Rd3 40. Qa8 c3 41. Qa4+ Ke1 42. f4 f5 43. Kc1 Rd2 44. Qa7 1-0';
+var MORPHY_PGN = '[Event "Paris Opera"]\n[White "Paul Morphy"]\n[Black "Duke Karl / Count Isouard"]\n[Result "1-0"]\n[ECO "C41"]\n\n1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0';
+
+document.getElementById('sampleKasparovBtn').addEventListener('click', function() {
+  document.getElementById('pgnInput').value = KASPAROV_PGN;
+  document.getElementById('reviewBtn').click();
+});
+document.getElementById('sampleMorphyBtn').addEventListener('click', function() {
+  document.getElementById('pgnInput').value = MORPHY_PGN;
+  document.getElementById('reviewBtn').click();
+});
+
+// ── New Game Button ──
+document.getElementById('newGameBtn').addEventListener('click', function() {
+  document.getElementById('gameInfoBanner').style.display = 'none';
+  document.getElementById('importCard').style.display = 'block';
+  document.getElementById('pgnInput').value = '';
+  coachReset('Ready for a new game. Paste a PGN or import from Chess.com.');
+});
+
+// ── Mode Tabs ──
+document.getElementById('tabReviewMode').addEventListener('click', function() {
+  this.classList.add('active');
+  document.getElementById('tabMaiaMode').classList.remove('active');
+  currentMode = 'review';
+  document.getElementById('importCard').style.display = 'block';
+});
+document.getElementById('tabMaiaMode').addEventListener('click', function() {
+  this.classList.add('active');
+  document.getElementById('tabReviewMode').classList.remove('active');
+  document.getElementById('coachPlayBtn')?.click();
+});
+
+// ── Sync Action ──
 document.getElementById('syncBtn').addEventListener('click', doSync);
 document.getElementById('chessUserInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doSync();
 });
-
-
 
 // ═══════════════════════════════════════════════════════
 // INIT
@@ -3709,13 +3780,11 @@ document.getElementById('chessUserInput').addEventListener('keydown', function(e
 var savedRating = loadRatingPref();
 document.getElementById('ratingSelect').value = savedRating;
 
-// Fallback: populate input from localStorage (if .env fetch already set it, this is a no-op)
+// Fallback: populate input from localStorage
 if (!document.getElementById('apiToken').value) {
   document.getElementById('apiToken').value = loadApiToken();
 }
 
 initEngine();
 initBoard();
-coachReset('Welcome! Options: (1) Paste a PGN and click "Review Game", (2) Click "Play vs Coach" to play Maia AI, then click "Review Game" to analyze your game, or (3) Load a FEN position and analyze it.');
-
-// Maia AI loads on-demand when user clicks "Play vs Coach" (see coachPlayBtn handler)
+coachReset('Welcome to Chess Coach! Import your Chess.com games or paste a PGN to begin game review.');

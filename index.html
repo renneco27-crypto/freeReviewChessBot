@@ -3,103 +3,155 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chess Coach</title>
+<title>Chess Coach — Game Review & AI Coach</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header>
-  <h1>Chess Coach <span>Coach · Stockfish · NNUE</span></h1>
-  <div class="rating-select-wrap">
-    <label for="ratingSelect">Rating</label>
-    <select id="ratingSelect">
-      <option value="1000">&lt;1200</option>
-      <option value="1200">1200–1399</option>
-      <option value="1400" selected>1400–1599</option>
-      <option value="1600">1600–1799</option>
-      <option value="1800">1800–1999</option>
-      <option value="2000">2000–2199</option>
-      <option value="2200">2200–2499</option>
-      <option value="2500">2500+</option>
-    </select>
+<!-- Header Navbar (Jakob's Law: Familiar Clean Navbar) -->
+<header class="app-header">
+  <div class="header-brand">
+    <span class="brand-logo">🎓</span>
+    <div class="brand-text">
+      <h1>Chess Coach</h1>
+      <span class="brand-sub">Stockfish NNUE · AI Voice Coach</span>
+    </div>
   </div>
-  <div class="token-wrap">
-    <input type="text" id="apiToken" placeholder="Lichess API token (get at lichess.org/account/oauth/token)" spellcheck="false">
-    <button class="btn small" id="tokenSaveBtn">Save</button>
+
+  <div class="header-tabs">
+    <button class="nav-tab active" id="tabReviewMode">🎓 Game Review</button>
+    <button class="nav-tab" id="tabMaiaMode">🤖 Play Coach</button>
+  </div>
+
+  <div class="header-actions">
+    <button class="btn tts-btn" id="ttsToggle" title="Toggle voice narration">&#128263; Voice: OFF</button>
+    <button class="btn icon-btn" id="settingsToggleBtn" title="Engine & Preferences Settings">&#9881; Settings</button>
   </div>
 </header>
 
-<div class="main-wrap">
-  <!-- Board column -->
-  <div class="board-col">
-    <div class="board-area">
-      <div class="eval-vert">
-        <span class="eval-val" id="evalDisplay">0.00</span>
-        <div class="eval-bar-wrap-v"><div class="eval-bar-v" id="evalBar"></div></div>
+<!-- Settings Modal / Popover -->
+<div class="settings-modal" id="settingsModal" style="display:none">
+  <div class="settings-content">
+    <div class="settings-header">
+      <h3>⚙️ Engine & Coach Settings</h3>
+      <button class="close-btn" id="settingsCloseBtn">&times;</button>
+    </div>
+    <div class="settings-body">
+      <div class="setting-item">
+        <label for="ratingSelect">Player Rating Level</label>
+        <select id="ratingSelect">
+          <option value="1000">&lt;1200 (Beginner)</option>
+          <option value="1200">1200–1399 (Novice)</option>
+          <option value="1400" selected>1400–1599 (Intermediate)</option>
+          <option value="1600">1600–1799 (Advanced)</option>
+          <option value="1800">1800–1999 (Club Player)</option>
+          <option value="2000">2000–2199 (Expert)</option>
+          <option value="2200">2200–2499 (Master)</option>
+          <option value="2500">2500+ (Grandmaster)</option>
+        </select>
       </div>
-      <div class="board-wrap" id="board"></div>
-    </div>
-    <div class="nav-landmark-col" id="landmarkNavRow" style="display:none">
-      <button class="btn" id="prevLandmarkBtn">&#9664; Back</button>
-      <button class="btn" id="nextLandmarkBtn">Next &#9654;</button>
-    </div>
-
-    <!-- FEN row -->
-    <div class="fen-row">
-      <input class="fen-input" id="fenInput" placeholder="Paste FEN to load a position…" spellcheck="false">
-      <button class="btn primary" id="positionBtn">&#9776; Position</button>
-    </div>
-
-    <!-- PGN row -->
-    <div class="pgn-row">
-      <textarea id="pgnInput" placeholder="Paste PGN here to review a complete game…" spellcheck="false" rows="4"></textarea>
-      <div class="pgn-actions">
-        <button class="btn accent" id="reviewBtn">&#9654; Review Game</button>
-        <button class="btn danger" id="clearBtn">Clear</button>
-      </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="move-controls">
-      <div class="depth-row">
-        <span>Depth</span>
+      <div class="setting-item">
+        <label for="depthSlider">Stockfish Analysis Depth: <span id="depthVal" class="bold-val">10</span></label>
         <input type="range" id="depthSlider" min="6" max="18" value="10"
                oninput="document.getElementById('depthVal').textContent=this.value">
-        <span id="depthVal">10</span>
       </div>
-      <button class="btn" id="flipBtn" title="Flip board">&#8635; Flip</button>
-      <button class="btn" id="suggestBtn" title="Show best move in current position">&#9650; Best Move</button>
-      <button class="btn" id="coachPlayBtn" title="Play a game against Maia AI">&#9822; Play vs Coach</button>
-      <button class="btn" id="ttsToggle" title="Toggle coach voice (browser built-in, no setup needed)">&#128263; Voice: OFF</button>
-      <div class="maia-delay-row" id="maiaDelayRow" style="display:none">
-        <span>Maia delay</span>
-        <input type="range" id="maiaDelaySlider" min="0" max="2000" value="1800" step="50"
-               oninput="document.getElementById('maiaDelayVal').textContent=this.value+'ms'">
-        <span id="maiaDelayVal">1800ms</span>
+      <div class="setting-item">
+        <label for="apiToken">Lichess API Token (Optional for Explorer)</label>
+        <div class="input-with-btn">
+          <input type="text" id="apiToken" placeholder="Personal OAuth token..." spellcheck="false">
+          <button class="btn primary small" id="tokenSaveBtn">Save</button>
+        </div>
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- Navigation bar -->
-    <div class="nav-bar" id="navBar" style="display:none">
-      <div class="nav-row">
-        <button class="btn" id="prevMoveBtn">&#8592;</button>
-        <span id="navMoveInfo"></span>
-        <button class="btn" id="nextMoveBtn">&#8594;</button>
+<div class="main-wrap">
+  <!-- Left Column: Board + Navigation + Import -->
+  <div class="board-col">
+    <!-- Top Game Banner (When Game is Loaded) -->
+    <div class="game-info-banner" id="gameInfoBanner" style="display:none">
+      <div class="game-meta">
+        <span class="game-players" id="gamePlayers">White vs Black</span>
+        <span class="game-opening" id="gameOpening">Opening Line</span>
       </div>
+      <button class="btn small" id="newGameBtn">← New Game</button>
     </div>
 
+    <!-- Board Area -->
+    <div class="board-area">
+      <!-- Vertical Eval Bar -->
+      <div class="eval-vert">
+        <span class="eval-val" id="evalDisplay">0.00</span>
+        <div class="eval-bar-wrap-v">
+          <div class="eval-bar-v" id="evalBar"></div>
+        </div>
+      </div>
+      <!-- Chessground Board Container -->
+      <div class="board-wrap" id="board"></div>
+    </div>
+
+    <!-- Clean Media Controls (Jakob's Law: Standard First/Prev/Next/Last) -->
+    <div class="board-nav-bar" id="boardNavBar">
+      <button class="btn icon-btn" id="firstMoveBtn" title="First Move">&#11176;</button>
+      <button class="btn icon-btn" id="prevMoveBtn" title="Previous Move (←)">&#8592; Prev</button>
+      <div class="nav-move-indicator" id="navMoveInfo">Start Position</div>
+      <button class="btn icon-btn" id="nextMoveBtn" title="Next Move (→)">Next &#8594;</button>
+      <button class="btn icon-btn" id="lastMoveBtn" title="Last Move">&#11177;</button>
+      <button class="btn icon-btn" id="flipBtn" title="Flip Board">&#8635; Flip</button>
+      <button class="btn icon-btn" id="suggestBtn" title="Best Engine Move">&#9650; Best</button>
+    </div>
+
+    <!-- Unified Game Import Box -->
+    <div class="import-card" id="importCard">
+      <div class="import-tabs">
+        <button class="import-tab active" id="importTabChesscom">♟ Chess.com Import</button>
+        <button class="import-tab" id="importTabPgn">📋 Paste PGN</button>
+        <button class="import-tab" id="importTabFen">♟ FEN</button>
+      </div>
+
+      <!-- Chess.com Tab Pane -->
+      <div class="import-pane" id="paneChesscom">
+        <div class="sync-row">
+          <input class="sync-input" id="chessUserInput" placeholder="Enter Chess.com username (e.g. magnuscarlsen)..." spellcheck="false">
+          <button class="btn primary" id="syncBtn">Fetch Games</button>
+        </div>
+        <div class="sync-status" id="syncStatus"></div>
+        <div class="sync-game-list" id="syncGameList"></div>
+      </div>
+
+      <!-- PGN Tab Pane -->
+      <div class="import-pane" id="panePgn" style="display:none">
+        <textarea id="pgnInput" placeholder="Paste PGN here to review a complete game…" spellcheck="false" rows="3"></textarea>
+        <div class="import-actions">
+          <button class="btn accent" id="reviewBtn">&#9654; Review Game</button>
+          <button class="btn danger" id="clearBtn">Clear</button>
+          <button class="btn text-btn" id="sampleKasparovBtn">Sample: Kasparov (1999)</button>
+          <button class="btn text-btn" id="sampleMorphyBtn">Sample: Morphy (1858)</button>
+        </div>
+      </div>
+
+      <!-- FEN Tab Pane -->
+      <div class="import-pane" id="paneFen" style="display:none">
+        <div class="fen-row">
+          <input class="fen-input" id="fenInput" placeholder="Paste FEN string to load a position…" spellcheck="false">
+          <button class="btn primary" id="positionBtn">Load</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Right column -->
+  <!-- Right Column: Coach Bot + Eval Graph + Move History -->
   <div class="right-col">
-    <!-- Engine Status -->
-    <div class="engine-status-big">
-      <div class="engine-dot big-dot" id="engineDot"></div>
-      <span id="engineLabel">Loading engine…</span>
+    <!-- Engine Status Pill -->
+    <div class="engine-status-pill">
+      <div class="engine-dot" id="engineDot"></div>
+      <span id="engineLabel">Loading Stockfish engine…</span>
     </div>
-    <!-- Coach -->
+
+    <!-- Animated Coach Bot Widget -->
     <div class="coach-widget">
       <div class="coach-avatar-wrap">
         <div class="coach-bot" id="coachBot" data-mood="good">
@@ -132,12 +184,13 @@
           <div class="fx-layer" id="fxLayer"></div>
         </div>
       </div>
+
       <div class="dialogue-box" id="dialogueBox">
         <div class="dialogue-header">
           <span class="dialogue-label" id="dialogueLabel">Ready</span>
           <span class="dialogue-icon" id="dialogueIconEl">&#10003;</span>
         </div>
-        <p class="dialogue-text" id="dialogueText">Ready when you are. Make a move or paste a PGN to review a game.</p>
+        <p class="dialogue-text" id="dialogueText">Ready when you are. Import a Chess.com game or paste a PGN to start.</p>
         <div class="why-row">
           <button class="btn-why" id="whyMistakeBtn" style="display:none" onclick="showRefutation()">&#9888; Why this is a mistake</button>
           <button class="btn-stop-replay" id="refStopBtn" style="display:none" onclick="stopRefutationReplay()">&#9646;&#9646; Stop replay</button>
@@ -146,49 +199,39 @@
       </div>
     </div>
 
-    <!-- Eval graph -->
+    <!-- Advantage Chart -->
     <div class="graph-panel">
-      <div class="panel-title">Evaluation Graph</div>
+      <div class="panel-header">
+        <span class="panel-title">Advantage Graph</span>
+        <span class="accuracy-score" id="accuracyDisplay"></span>
+      </div>
       <div class="graph-wrap">
         <canvas id="evalCanvas"></canvas>
         <div id="graphTooltip"></div>
       </div>
     </div>
 
-    <!-- Chess.com sync -->
-    <div class="chess-sync-panel">
-      <div class="panel-title">Chess.com Sync</div>
-      <div class="sync-row">
-        <input class="sync-input" id="chessUserInput" placeholder="Username" spellcheck="false">
-        <button class="btn" id="syncBtn">&#8635; Sync</button>
-      </div>
-      <div class="sync-status" id="syncStatus"></div>
-      <div class="sync-game-list" id="syncGameList"></div>
-    </div>
-
-    <!-- Move history -->
+    <!-- Move History Table -->
     <div class="history-panel">
       <div class="history-header">
-        <span class="panel-title" style="margin:0">Move History</span>
-        <span class="history-actions">
-          <button class="btn-undo" id="undoDeleteBtn" style="display:none" title="Undo branch deletion">&#10003;</button>
-          <span id="accuracyDisplay" style="font-size:11px;color:var(--text-dim)"></span>
-        </span>
+        <span class="panel-title">Move History</span>
       </div>
       <div class="move-list" id="moveList"></div>
-      <!-- Opening Explorer -->
-      <div class="explorer-panel" style="border:none;border-radius:0;box-shadow:none;padding:10px 0 0;margin-top:6px;border-top:1px solid var(--border)">
-        <div class="panel-title">
-          <span>Opening Explorer</span>
-          <button class="btn-explorer-toggle" id="explorerToggleBtn" style="display:none" title="Show/hide explorer during Maia game">&#9776;</button>
-        </div>
-        <div id="explorerContent">
-          <div class="explorer-empty">Make a move to see opening statistics</div>
-        </div>
+    </div>
+
+    <!-- Opening Explorer -->
+    <div class="explorer-panel" id="explorerPanel">
+      <div class="panel-header">
+        <span class="panel-title">Opening Explorer</span>
+        <button class="btn-explorer-toggle" id="explorerToggleBtn" style="display:none">&#9776;</button>
+      </div>
+      <div id="explorerContent">
+        <div class="explorer-empty">Make a move or review a game to explore theory</div>
       </div>
     </div>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.min.js"></script>
 <script src="chess.js"></script>
 <script src="chessground.js"></script>
