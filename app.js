@@ -1146,9 +1146,11 @@ function goToMove(idx) {
   if (idx < -1 || idx >= moveHistory.length) return;
   navIdx = idx;
 
-  // Stop playback but keep review mode (don't cancel branch potential)
+  // Stop playback but keep review mode
   if (playbackTimer) clearTimeout(playbackTimer);
   playbackCancelled = true;
+
+  clearMistakeUI();
 
   // Exit branch mode when navigating main line
   branchState.mode = 'mainline';
@@ -1157,13 +1159,12 @@ function goToMove(idx) {
   if (idx === -1) {
     game = new Chess();
     updateBoard();
-    cg.set({ check: false });
+    cg.set({ check: false, shapes: [] });
     updateEvalDisplay(0);
-    cg.setShapes([]);
     updateNavDisplay();
     renderHistory();
     drawGraph();
-    coachProgress('Start position');
+    coachReset('Start position');
     updateExplorer();
     return;
   }
@@ -1194,12 +1195,55 @@ function goToMove(idx) {
 
   updateNavDisplay();
 
-  var cls = m.classification || 'good';
+  var cls = (m.classification || 'good').toLowerCase().replace(/\s+/g, '');
   var color = MOOD_COLORS[cls] || '#c9a24b';
   var meta = CLASS_META[cls] || CLASS_META.good;
   var mn = Math.floor(idx / 2) + 1;
-  var suffix = m.color === 'White' ? '.' : '...';
-  coachProgress(mn + suffix + ' ' + m.san + ' &middot; <span style="color:' + color + '">' + meta.label + '</span> &middot; ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2));
+  var suffix = idx % 2 === 0 ? '.' : '...';
+
+  // Synchronize Coach Robot Avatar & Dialogue Header
+  var bot = document.getElementById('coachBot');
+  var box = document.getElementById('dialogueBox');
+  if (bot) {
+    bot.style.setProperty('--mood', color);
+    bot.setAttribute('data-mood', cls);
+  }
+  if (box) {
+    box.style.setProperty('--mood', color);
+  }
+  var mouth = document.getElementById('botMouth');
+  if (mouth) mouth.setAttribute('d', MOUTH[cls] || MOUTH.good);
+  var browL = document.getElementById('botBrowL');
+  if (browL) browL.setAttribute('d', BROW_L[cls] || BROW_L.good);
+  var browR = document.getElementById('botBrowR');
+  if (browR) browR.setAttribute('d', BROW_R[cls] || BROW_R.good);
+  var badge = document.getElementById('badgeIcon');
+  if (badge) badge.textContent = meta.icon;
+  var lbl = document.getElementById('dialogueLabel');
+  if (lbl) {
+    lbl.textContent = meta.label;
+    lbl.style.color = color;
+  }
+  var ico = document.getElementById('dialogueIconEl');
+  if (ico) {
+    ico.textContent = meta.icon;
+    ico.style.color = color;
+  }
+
+  // Refutation button for blunder/mistake/inaccuracy only
+  var isBad = ['blunder', 'mistake', 'inaccuracy'].indexOf(cls) !== -1;
+  window._lastPv = isBad ? (m.pvAfter || null) : null;
+  window._lastFen = isBad ? (m.fenAfter || null) : null;
+  var whyBtn = document.getElementById('whyMistakeBtn');
+  if (whyBtn) {
+    whyBtn.style.display = (isBad && m.pvAfter) ? 'inline-block' : 'none';
+  }
+  var refDisplay = document.getElementById('refutationDisplay');
+  if (refDisplay) refDisplay.innerHTML = '';
+  var stopBtn = document.getElementById('refStopBtn');
+  if (stopBtn) stopBtn.style.display = 'none';
+
+  coachProgress(mn + suffix + ' <strong>' + m.san + '</strong> &middot; <span style="color:' + color + '">' + meta.label + '</span> &middot; ' + (m.evalAfter > 0 ? '+' : '') + m.evalAfter.toFixed(2));
   renderHistory();
   drawGraph();
   updateExplorer();
