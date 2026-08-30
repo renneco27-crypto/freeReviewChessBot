@@ -31,7 +31,6 @@ export function useEngine() {
 
       const messageHandler = (e: MessageEvent) => {
         const msg = e.data;
-        // Looking for "bestmove"
         if (typeof msg === 'string' && msg.startsWith('bestmove')) {
           const move = msg.split(' ')[1];
           worker.removeEventListener('message', messageHandler);
@@ -45,5 +44,38 @@ export function useEngine() {
     });
   };
 
-  return { isReady, evaluatePosition };
+  const evaluatePositionDetailed = (fen: string, depth = 15): Promise<{ bestMove: string; scoreCp: number; mate?: number }> => {
+    return new Promise((resolve) => {
+      const worker = engineRef.current;
+      if (!worker) return resolve({ bestMove: '', scoreCp: 0 });
+
+      let latestCp = 0;
+      let latestMate: number | undefined;
+
+      const messageHandler = (e: MessageEvent) => {
+        const msg = e.data;
+        if (typeof msg === 'string') {
+          // Parse score cp
+          const cpMatch = msg.match(/score cp (-?\d+)/);
+          if (cpMatch) latestCp = parseInt(cpMatch[1]);
+
+          // Parse score mate
+          const mateMatch = msg.match(/score mate (-?\d+)/);
+          if (mateMatch) latestMate = parseInt(mateMatch[1]);
+
+          if (msg.startsWith('bestmove')) {
+            const move = msg.split(' ')[1];
+            worker.removeEventListener('message', messageHandler);
+            resolve({ bestMove: move, scoreCp: latestCp, mate: latestMate });
+          }
+        }
+      };
+
+      worker.addEventListener('message', messageHandler);
+      worker.postMessage(`position fen ${fen}`);
+      worker.postMessage(`go depth ${depth}`);
+    });
+  };
+
+  return { isReady, evaluatePosition, evaluatePositionDetailed };
 }
