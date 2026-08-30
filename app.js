@@ -2973,7 +2973,7 @@ function getMaiaTopMoves(maskedLogits, legalMoves, isBlack, temperature, count) 
 
 function startMaiaGame(preserveGame) {
   currentMode = 'interactive';
-  // Only reset game if not preserving a loaded FEN position
+  // If not preserving existing position from board/PGN, reset
   if (!preserveGame) {
     game = new Chess();
     moveHistory = [];
@@ -2981,70 +2981,65 @@ function startMaiaGame(preserveGame) {
   }
   prevEval = null;
   maiaHistory = [];
-  gameHistory = [game.fen()]; // Initialize game history for draw detection
-  navIdx = -1;
-  // Orient board and restrict movable pieces to the player's side
+  gameHistory = [game.fen()];
+  navIdx = moveHistory.length > 0 ? moveHistory.length - 1 : -1;
   cg.set({ orientation: playerColor });
-  updateBoard(); // uses maiaMode + playerColor to restrict movable
+  updateBoard();
   updateEvalDisplay(0);
   renderHistory();
   drawGraph();
-  document.getElementById('explorerContent').parentElement.classList.add('explorer-hidden');
-  document.getElementById('navBar').style.display = 'none';
-  document.getElementById('pgnInput').value = '';
-  document.getElementById('fenInput').value = '';
-  document.getElementById('maiaDelayRow').style.display = '';
-  document.getElementById('explorerToggleBtn').style.display = '';
-  coachReset('Play vs Coach started. Color: ' + playerColor + '.');
+  
+  var exp = document.getElementById('explorerContent');
+  if (exp && exp.parentElement) exp.parentElement.classList.add('explorer-hidden');
+  var delayRow = document.getElementById('maiaDelayRow');
+  if (delayRow) delayRow.style.display = '';
+  var expToggle = document.getElementById('explorerToggleBtn');
+  if (expToggle) expToggle.style.display = '';
+  
+  var turnName = game.turn() === 'w' ? 'White' : 'Black';
+  coachReset('Playing vs Maia AI. You are ' + playerColor + ' (' + turnName + ' to move).');
 }
 
 function classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isWhiteAfter) {
   var beforeCp = beforeLine ? (beforeLine.cp || 0) : 0;
   var afterCp = afterLine ? (afterLine.cp || 0) : 0;
-  // isWhiteAfter = game.turn()==='b' meaning Black is to move = White just moved.
-  // Engine cp is always from the side-to-move's POV, so negate to get White-relative.
   var evBefore = (isWhiteAfter ? -beforeCp : beforeCp) / 100;
   var evAfter  = (isWhiteAfter ? -afterCp  : afterCp)  / 100;
   var swing = Math.abs(evAfter - evBefore);
   var cls = classifyMove(beforeLine, null, afterLine, uci, new Chess(fenBefore));
   moveHistory.push({ san: san, classification: cls, evalBefore: evBefore, evalAfter: evAfter, fenBefore: fenBefore, fenAfter: fenAfter, bestUci: beforeLine ? beforeLine.move : null, pvBefore: beforeLine ? beforeLine.pv || null : null, pvAfter: afterLine ? afterLine.pv || null : null });
-  // evAfter is already White-relative — use it directly (no second flip)
   graphMoves.push({ eval: evAfter, classification: cls, moveSan: san, ply: moveHistory.length, pvAfter: afterLine ? afterLine.pv || null : null });
   return { cls: cls, evBefore: evBefore, evAfter: evAfter, swing: swing };
 }
 
 function evalPosition(fen, depth, cb) {
-  analysisPool.evaluate(fen, depth, function(lines) {
+  analysisPool.evaluate(fen, Math.min(depth || 10, 12), function(lines) {
     cb(parseLines(lines)[0] || null);
-  });
+  }, 250);
 }
 
 function onMaiaUserMove(from, to, promotion) {
   promotion = promotion || 'q';
-  // Cancel any in-flight TTS/coach commentary so it doesn't fire doMaiaResponse mid-move
   cancelTTS();
-  // If navigated back in history, truncate history — new move becomes the latest
-  // BUT: navIdx === -1 means "not navigated to any specific move" (just viewing the board)
-  // In this case, we're at the end of moveHistory, so don't truncate!
+  
   if (navIdx >= 0 && navIdx < moveHistory.length - 1) {
     moveHistory = moveHistory.slice(0, navIdx + 1);
     graphMoves = graphMoves.slice(0, navIdx + 1);
-    // Trim gameHistory to match — keeps only positions up to navIdx+1 moves played
-    // gameHistory[0] is the starting position, entries 1..N correspond to moves 0..N-1
     gameHistory = gameHistory.slice(0, navIdx + 2);
     maiaHistory = [];
     prevEval = null;
     navIdx = -1;
   }
+  
   var result = game.move({ from: from, to: to, promotion: promotion });
   if (!result) return;
-  var san = result.san, uci = from + to;
+  var san = result.san, uci = from + to + (promotion !== 'q' ? promotion : '');
   var fenAfter = game.fen();
+  var fenBefore = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1].fenAfter : new Chess().fen();
   recordPosition(fenAfter);
   updateBoard();
   cg.set({ lastMove: [from, to], check: game.in_check() ? game.turn() : false });
   
-  // Check for draw after user move
   var drawCheck = checkDrawConditions(game);
   if (drawCheck.isDraw) {
     finishMaiaGame('Draw by ' + drawCheck.reason + '!', san, uci, '');
@@ -3055,144 +3050,107 @@ function onMaiaUserMove(from, to, promotion) {
     finishMaiaGame('Checkmate! You won!', san, uci, '');
     return;
   }
+  
   isAnalysing = true;
   var depth = Math.min(parseInt(document.getElementById('depthSlider').value, 10), 12);
   var rating = document.getElementById('ratingSelect').value;
-  var fenBefore = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1].fenAfter : new Chess().fen();
 
-  function afterUserEval(afterLine) {
-    var isBlackTurn = game.turn() === 'b';
-    if (!prevEval) {
-      evalPosition(fenBefore, depth, function(beforeLine) {
-        var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isBlackTurn);
-        updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
-        renderHistory();
-        drawGraph();
-        // Set TTS callback BEFORE updateCoach so typewrite->speakText's onend fires it
-        _ttsCallback = function() { doMaiaResponse(depth, rating); };
-        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
-        // Safety net: if TTS never fires (disabled/error), fall back to typewrite delay
-        if (!ttsEnabled) {
-          var d = Math.max(200, typewriteEndTime - Date.now());
-          setTimeout(function() { doMaiaResponse(depth, rating); }, d);
-        } else {
-          setTimeout(function() {
-            if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
-          }, 20000);
-        }
-        prevEval = afterLine;
-      });
-    } else {
-      var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-      updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
-      renderHistory();
-      drawGraph();
-      // Set TTS callback BEFORE updateCoach so typewrite->speakText's onend fires it
-      _ttsCallback = function() { doMaiaResponse(depth, rating); };
-      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
-      // Safety net: if TTS never fires (disabled/error), fall back to typewrite delay
-      if (!ttsEnabled) {
-        var d = Math.max(200, typewriteEndTime - Date.now());
-        setTimeout(function() { doMaiaResponse(depth, rating); }, d);
-      } else {
-        setTimeout(function() {
-          if (_ttsCallback) { var cb = _ttsCallback; _ttsCallback = null; cb(); }
-        }, 20000);
+  function finishUserEval(beforeLine, afterLine, isBlackTurn) {
+    var r = classifyAndPushMove(from, to, san, uci, fenBefore, fenAfter, beforeLine, afterLine, isBlackTurn);
+    updateEvalDisplay(r.evAfter * 100);
+    renderHistory();
+    drawGraph();
+    updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: san, isWhiteToMove: !isBlackTurn, isUserMove: true });
+    prevEval = afterLine;
+    isAnalysing = false;
+    
+    // Snappy auto-play response from Maia without audio blocking
+    setTimeout(function() {
+      if (maiaMode && !game.game_over()) {
+        doMaiaResponse(depth, rating);
       }
-      prevEval = afterLine;
-    }
+    }, 300);
   }
 
-  evalPosition(fenAfter, depth, afterUserEval);
+  evalPosition(fenAfter, depth, function(afterLine) {
+    var isBlackTurn = game.turn() === 'b';
+    if (!prevEval) {
+      evalPosition(fenBefore, depth, function(bLine) {
+        finishUserEval(bLine, afterLine, isBlackTurn);
+      });
+    } else {
+      finishUserEval(prevEval, afterLine, isBlackTurn);
+    }
+  });
 }
 
 function doMaiaResponse(depth, rating) {
+  if (!maiaMode || game.game_over()) return;
   setEngineStatus('maia');
   coachProgress('Maia is thinking...');
+  
   getMaiaMove(game, rating).then(function(result) {
     if (!result) {
       isAnalysing = false;
       setEngineStatus('ready');
-      coachReset('Maia could not find a move.');
+      coachReset('Maia could not find a legal move.');
       return;
     }
     var predUci = result.move;
-    var topMoves = result.topMoves;
-    var delay = parseInt(document.getElementById('maiaDelaySlider').value, 10);
-    setTimeout(function() {
-      var fenBefore = game.fen();
-      var mr = tryParseUciMove(game, predUci);
-      if (!mr) {
-        isAnalysing = false;
-        setEngineStatus('ready');
-        coachReset('Maia returned an illegal move: ' + predUci);
-        return;
-      }
-      var maiaUci = mr.from + mr.to + (mr.promotion || '');
-      var fenAfter = game.fen();
-      maiaHistory.push(tokenizeBoard(game));
-      if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
-      recordPosition(fenAfter);
-      
-      // Show Maia's move on the board before finishing
-      cg.set({ fen: game.fen(), turnColor: toColor(game.turn()), movable: { color: 'none', dests: new Map() }, lastMove: [mr.from, mr.to], check: game.in_check() ? game.turn() : false });
+    var fenBefore = game.fen();
+    var mr = tryParseUciMove(game, predUci);
+    if (!mr) {
+      isAnalysing = false;
+      setEngineStatus('ready');
+      coachReset('Maia suggested illegal move: ' + predUci);
+      return;
+    }
+    var maiaUci = mr.from + mr.to + (mr.promotion || '');
+    var fenAfter = game.fen();
+    maiaHistory.push(tokenizeBoard(game));
+    if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
+    recordPosition(fenAfter);
+    
+    cg.set({
+      fen: game.fen(),
+      turnColor: toColor(game.turn()),
+      movable: { color: playerColor, dests: getLegalDests() },
+      lastMove: [mr.from, mr.to],
+      check: game.in_check() ? game.turn() : false
+    });
 
-      // Check for draw after Maia move
-      var drawCheck = checkDrawConditions(game);
-      if (drawCheck.isDraw) {
-        finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
-        return;
-      }
-      
-      if (game.game_over()) {
-        finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
-        return;
-      }
-      navIdx = moveHistory.length;
-      updateNavDisplay();
+    var drawCheck = checkDrawConditions(game);
+    if (drawCheck.isDraw) {
+      finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
+      return;
+    }
+    
+    if (game.game_over()) {
+      finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
+      return;
+    }
+    navIdx = moveHistory.length;
+    updateNavDisplay();
 
-      // Evaluate Maia's move quality
-      evalPosition(fenAfter, depth, function(afterLine) {
-        var isBlackTurn = game.turn() === 'b';
-        var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-        updateEvalDisplay(r.evAfter * 100); // evAfter is White-relative pawns
-        renderHistory();
-        drawGraph();
+    evalPosition(fenAfter, depth, function(afterLine) {
+      var isBlackTurn = game.turn() === 'b';
+      var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
+      updateEvalDisplay(r.evAfter * 100);
+      renderHistory();
+      drawGraph();
 
-        // Build dual feedback message
-        var stockfishMove = null;
-        if (prevEval && prevEval.move) {
-          var tmpGame = new Chess(fenBefore);
-          var sfMr = tmpGame.move({ from: prevEval.move.slice(0,2), to: prevEval.move.slice(2,4), promotion: 'q' });
-          stockfishMove = sfMr ? sfMr.san : prevEval.move;
-        }
-        var sfEval = prevEval ? ((prevEval.cp || 0) / 100).toFixed(2) : null;
-        var sfEvalStr = sfEval ? (sfEval > 0 ? '+' : '') + sfEval : '';
-        var maiaTopHtml = '';
-        for (var t = 0; t < topMoves.length; t++) {
-          var tmpGame2 = new Chess(fenBefore);
-          var tmMr = tmpGame2.move({ from: topMoves[t].uci.slice(0,2), to: topMoves[t].uci.slice(2,4), promotion: topMoves[t].uci.length > 4 ? topMoves[t].uci[4] : 'q' });
-          var tmSan = tmMr ? tmMr.san : topMoves[t].uci;
-          maiaTopHtml += '<span class="accent">' + tmSan + '</span> ' + (topMoves[t].prob * 100).toFixed(0) + '%' + (t < topMoves.length - 1 ? ' &middot; ' : '');
-        }
-        var msg = 'Maia played <span class="accent">' + mr.san + '</span>.';
-        if (prevEval && prevEval.move) {
-          if (prevEval.move === predUci) {
-            msg += ' That was also Stockfish\'s top choice (' + sfEvalStr + ').';
-          } else if (stockfishMove && sfEvalStr) {
-            msg += ' Stockfish preferred <span class="stockfish-preview accent" data-sf-uci="' + prevEval.move + '" data-sf-fen="' + fenBefore + '">' + stockfishMove + '</span> (' + sfEvalStr + ').';
-          }
-        }
-        msg += ' Maia was choosing among: ' + maiaTopHtml;
-
-        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg, isUserMove: false });
-        prevEval = afterLine;
-        isAnalysing = false;
-        setEngineStatus('ready');
-        // Re-enable player's pieces now that it's their turn
-        cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
-      });
-    }, delay);
+      var msg = 'Maia played <span class="accent">' + mr.san + '</span>.';
+      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg, isUserMove: false });
+      prevEval = afterLine;
+      isAnalysing = false;
+      setEngineStatus('ready');
+      cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
+    });
+  }).catch(function(err) {
+    console.error('[Maia Error]', err);
+    isAnalysing = false;
+    setEngineStatus('ready');
+    coachReset('Maia error: ' + (err.message || err));
   });
 }
 
@@ -3791,13 +3749,16 @@ document.getElementById('newGameBtn').addEventListener('click', function() {
 document.getElementById('tabReviewMode').addEventListener('click', function() {
   this.classList.add('active');
   document.getElementById('tabMaiaMode').classList.remove('active');
+  if (maiaMode) stopMaiaMode();
   currentMode = 'review';
   document.getElementById('importCard').style.display = 'block';
 });
 document.getElementById('tabMaiaMode').addEventListener('click', function() {
   this.classList.add('active');
   document.getElementById('tabReviewMode').classList.remove('active');
-  document.getElementById('coachPlayBtn')?.click();
+  if (!maiaMode) {
+    document.getElementById('coachPlayBtn')?.click();
+  }
 });
 
 // ── Sync Action ──
