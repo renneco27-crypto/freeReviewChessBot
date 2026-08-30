@@ -674,7 +674,8 @@
     <button class="btn btn-practice" id="practice-btn" onclick="togglePracticeMode()">🎯 PRACTICE LINE</button>
     <button class="btn btn-warning" onclick="revertToOriginalPgn()">🔄 REVERT PGN</button>
     <button class="btn" onclick="flipBoard()">🔄 FLIP</button>
-    <button class="btn btn-primary" onclick="exportCurrentLine()">💾 EXPORT</button>
+    <button class="btn btn-primary" onclick="exportMergedRepertoire()" title="Export entire merged repertoire tree as a single master PGN">📦 EXPORT ALL</button>
+    <button class="btn" onclick="exportCurrentLine()" title="Export currently selected line only">💾 EXPORT LINE</button>
   </div>
 </header>
 
@@ -688,7 +689,8 @@
     <div class="panel-body">
       <textarea id="pgn-input" placeholder="Paste repertoire PGN with nested variations (...) and {comments}..."></textarea>
       <div class="btn-group">
-        <button class="btn btn-primary" style="flex:1;" onclick="decompilePgn()">⚡ DECOMPILE</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="decompilePgn()" title="Decompile and replace repertoire with this PGN">⚡ DECOMPILE</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="mergePgnAction()" title="Merge PGN into current repertoire without conflicts">➕ MERGE PGN</button>
         <button class="btn" onclick="loadSampleScotch()">SAMPLE</button>
         <button class="btn" onclick="document.getElementById('file-upload').click()">📁 UPLOAD</button>
         <input type="file" id="file-upload" accept=".pgn" style="display:none" onchange="handleFileUpload(event)">
@@ -1341,11 +1343,10 @@ function decompilePgn(rawText) {
 
   originalPgnRaw = pgnText;
 
-  // 1. Strip headers
+function parsePgnTokens(pgnText) {
   let body = pgnText.replace(/\[.*?\]/g, '').trim();
   body = body.replace(/(\*|1-0|0-1|1\/2-1\/2)\s*$/, '').trim();
 
-  // 2. Tokenize moves, comments {...}, and parenthetical variations (...)
   const tokenPattern = /(\()|(\))|(\{[\s\S]*?\})|(\$\d+)|([0-9]+\.+)|([a-zA-Z0-9+#=_-]+)/g;
   let tokens = [];
   let match;
@@ -1358,10 +1359,69 @@ function decompilePgn(rawText) {
     else if (match[5]) tokens.push({ type: 'move_num', val: match[5] });
     else if (match[6]) tokens.push({ type: 'san', val: match[6] });
   }
+  return tokens;
+}
 
-  // 3. Build recursive Move Tree with real Chess.js simulation
+function decompilePgn(rawText) {
+  const pgnText = rawText || document.getElementById('pgn-input').value.trim();
+  if (!pgnText) {
+    alert("Please enter or paste a PGN string.");
+    return;
+  }
+
+  originalPgnRaw = pgnText;
   const tempSim = new Chess();
   const root = new TreeNode("START", null, 0, tempSim.fen());
+  
+  const tokens = parsePgnTokens(pgnText);
+  applyTokensToTree(root, tokens);
+
+  treeRoot = root;
+  rebuildDecompiledLines();
+  renderLinesList();
+  if (decompiledLines.length > 0) {
+    selectLine(0);
+  }
+}
+
+function mergePgnAction() {
+  const pgnText = document.getElementById('pgn-input').value.trim();
+  if (!pgnText) {
+    alert("Please paste a PGN in the text box to merge into the existing repertoire.");
+    return;
+  }
+
+  if (!treeRoot) {
+    decompilePgn(pgnText);
+    return;
+  }
+
+  const oldCount = decompiledLines.length;
+  mergePgnIntoTree(pgnText);
+  const newCount = decompiledLines.length;
+  alert(`✅ Merged successfully! Repertoire now contains ${newCount} total playable lines (+${Math.max(0, newCount - oldCount)} new branches).`);
+}
+
+function mergePgnIntoTree(pgnText) {
+  if (!treeRoot) {
+    decompilePgn(pgnText);
+    return;
+  }
+
+  const tokens = parsePgnTokens(pgnText);
+  applyTokensToTree(treeRoot, tokens);
+
+  rebuildDecompiledLines();
+  renderLinesList();
+
+  if (activeLineIndex >= decompiledLines.length) {
+    selectLine(0);
+  } else {
+    selectLine(activeLineIndex);
+  }
+}
+
+function applyTokensToTree(root, tokens) {
   let stack = [root];
 
   for (const token of tokens) {
@@ -1379,25 +1439,39 @@ function decompilePgn(rawText) {
       try {
         const m = branchSim.move(sanMove);
         if (m) {
-          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen(), "", m.from, m.to);
-          curr.children.push(node);
-          stack[stack.length - 1] = node;
+          let matching = curr.children.find(c => c.san === m.san);
+          if (matching) {
+            stack[stack.length - 1] = matching;
+          } else {
+            const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen(), "", m.from, m.to);
+            curr.children.push(node);
+            stack[stack.length - 1] = node;
+          }
+        } else {
+          let matching = curr.children.find(c => c.san === sanMove);
+          if (matching) {
+            stack[stack.length - 1] = matching;
+          } else {
+            const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
+            curr.children.push(node);
+            stack[stack.length - 1] = node;
+          }
+        }
+      } catch (err) {
+        let matching = curr.children.find(c => c.san === sanMove);
+        if (matching) {
+          stack[stack.length - 1] = matching;
         } else {
           const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
           curr.children.push(node);
           stack[stack.length - 1] = node;
         }
-      } catch (err) {
-        const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
-        curr.children.push(node);
-        stack[stack.length - 1] = node;
       }
     }
   }
+}
 
-  treeRoot = root;
-
-  // 4. Extract all terminal lines
+function rebuildDecompiledLines() {
   decompiledLines = [];
   function dfs(node, path) {
     if (!node.children || node.children.length === 0) {
@@ -1410,12 +1484,7 @@ function decompilePgn(rawText) {
       dfs(child, [...path, child]);
     }
   }
-  dfs(root, []);
-
-  renderLinesList();
-  if (decompiledLines.length > 0) {
-    selectLine(0);
-  }
+  if (treeRoot) dfs(treeRoot, []);
 }
 
 let activeSubsetBranch = null;
@@ -1424,41 +1493,62 @@ function getTopLevelBranchGroups() {
   const groups = {};
   decompiledLines.forEach((lineNodes, idx) => {
     const sans = lineNodes.map(n => n.san);
-    let categoryName = "Scotch Game Main";
+    let categoryName = "Repertoire Main";
 
-    // Move 3 black response (ply 6):
-    if (sans.length >= 6) {
-      const m3_black = sans[5];
-      if (m3_black === 'exd4') {
-        if (sans.length >= 8) {
-          const m4_black = sans[7];
-          if (m4_black === 'Nxd4') {
-            categoryName = 'Scotch: 4...Nxd4 5. Qxd4';
-          } else if (m4_black === 'Bc5') {
-            categoryName = 'Scotch: Classical (4...Bc5)';
-          } else if (m4_black === 'Nf6') {
-            categoryName = 'Scotch: Mieses (4...Nf6)';
+    const m1_w = sans[0] || "e4";
+    const m1_b = sans[1] || "";
+
+    if (m1_w === "e4") {
+      if (m1_b === "e5") {
+        if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "Nc6") {
+          if (sans.length >= 5 && sans[4] === "d4") {
+            if (sans.length >= 6 && sans[5] === "exd4") {
+              if (sans.length >= 8 && sans[7] === "Nxd4") categoryName = "Scotch: 4...Nxd4 5. Qxd4";
+              else if (sans.length >= 8 && sans[7] === "Bc5") categoryName = "Scotch: Classical (4...Bc5)";
+              else if (sans.length >= 8 && sans[7] === "Nf6") categoryName = "Scotch: Mieses (4...Nf6)";
+              else if (sans.length >= 8) categoryName = `Scotch: 4...${sans[7]}`;
+              else categoryName = "Scotch Game: 3...exd4";
+            } else if (sans.length >= 6) {
+              categoryName = `Scotch: 3...${sans[5]}`;
+            } else {
+              categoryName = "Scotch Game Main";
+            }
+          } else if (sans.length >= 5 && sans[4] === "Bc4") {
+            categoryName = "Italian Game (1. e4 e5 2. Nf3 Nc6 3. Bc4)";
+          } else if (sans.length >= 5 && sans[4] === "Bb5") {
+            categoryName = "Ruy Lopez (1. e4 e5 2. Nf3 Nc6 3. Bb5)";
           } else {
-            categoryName = `Scotch: 4...${m4_black}`;
+            categoryName = "Open Game (1. e4 e5 2. Nf3 Nc6)";
           }
+        } else if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "Nf6") {
+          categoryName = "Petrov Defense (1. e4 e5 2. Nf3 Nf6)";
+        } else if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "d6") {
+          categoryName = "Philidor Defense (1. e4 e5 2. Nf3 d6)";
         } else {
-          categoryName = 'Scotch: 3...exd4 4. Nxd4';
+          categoryName = "Open Game (1. e4 e5)";
         }
-      } else if (m3_black === 'd6') {
-        categoryName = 'Scotch: 3...d6 (Philidor Defense)';
-      } else if (m3_black === 'Nf6') {
-        categoryName = 'Scotch: 3...Nf6 (Two Knights Counter)';
-      } else if (m3_black === 'f6') {
-        categoryName = 'Scotch: 3...f6';
-      } else if (m3_black === 'd5') {
-        categoryName = 'Scotch: 3...d5 (Scotch Gambit)';
-      } else if (m3_black === 'Bb4+') {
-        categoryName = 'Scotch: 3...Bb4+';
-      } else if (m3_black === 'Nxd4') {
-        categoryName = 'Scotch: 3...Nxd4';
-      } else {
-        categoryName = `Scotch: 3...${m3_black}`;
+      } else if (m1_b === "d5") {
+        categoryName = "Scandinavian Defense (1. e4 d5)";
+      } else if (m1_b === "c5") {
+        if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "d6") categoryName = "Sicilian: Najdorf / Dragon (2...d6)";
+        else if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "Nc6") categoryName = "Sicilian: Open (2...Nc6)";
+        else if (sans.length >= 4 && sans[2] === "Nf3" && sans[3] === "e6") categoryName = "Sicilian: French Variation (2...e6)";
+        else categoryName = "Sicilian Defense (1. e4 c5)";
+      } else if (m1_b === "e6") {
+        categoryName = "French Defense (1. e4 e6)";
+      } else if (m1_b === "c6") {
+        categoryName = "Caro-Kann Defense (1. e4 c6)";
+      } else if (m1_b === "Nf6") {
+        categoryName = "Alekhine Defense (1. e4 Nf6)";
+      } else if (m1_b === "d6" || m1_b === "g6") {
+        categoryName = "Pirc / Modern Defense (1. e4)";
+      } else if (m1_b) {
+        categoryName = `1. e4 ${m1_b}`;
       }
+    } else if (m1_w === "d4") {
+      if (m1_b === "d5") categoryName = "Queen's Pawn (1. d4 d5)";
+      else if (m1_b === "Nf6") categoryName = "Indian Defense (1. d4 Nf6)";
+      else if (m1_b) categoryName = `1. d4 ${m1_b}`;
     }
 
     if (!groups[categoryName]) {
@@ -1962,6 +2052,68 @@ function revertToOriginalPgn() {
   document.getElementById('pgn-input').value = originalPgnRaw;
   decompilePgn(originalPgnRaw);
   alert("Reverted to original PGN successfully!");
+}
+
+function serializeTreeToPgn(root) {
+  function nodeToPgn(node) {
+    if (!node.children || node.children.length === 0) return "";
+    let parts = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = node.children[i];
+      const ply = child.ply;
+      const moveNum = Math.ceil(ply / 2);
+      let moveStr = "";
+      if (ply % 2 === 1) {
+        moveStr = `${moveNum}. ${child.san}`;
+      } else {
+        moveStr = (i === 0) ? child.san : `${moveNum}... ${child.san}`;
+      }
+
+      if (child.comment) {
+        moveStr += ` {${child.comment}}`;
+      }
+
+      const sub = nodeToPgn(child);
+      if (sub) {
+        moveStr += ` ${sub}`;
+      }
+
+      if (i === 0) {
+        parts.push(moveStr);
+      } else {
+        parts.push(`(${moveStr})`);
+      }
+    }
+    return parts.join(' ');
+  }
+
+  return (nodeToPgn(root) + " *").trim();
+}
+
+function exportMergedRepertoire() {
+  if (!treeRoot || !treeRoot.children || treeRoot.children.length === 0) {
+    alert("No repertoire tree loaded to export.");
+    return;
+  }
+
+  const pgnBody = serializeTreeToPgn(treeRoot);
+  const fullExport = `[Event "White Repertoire Master Tree"]
+[Site "Lawrence Cortes Repertoire Engine"]
+[Date "${new Date().toISOString().slice(0,10)}"]
+[Round "1"]
+[White "Repertoire"]
+[Black "Various"]
+[Result "*"]
+
+${pgnBody}`;
+
+  const blob = new Blob([fullExport], { type: 'application/x-chess-pgn' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `full_merged_repertoire_${new Date().toISOString().slice(0,10)}.pgn`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportCurrentLine() {
