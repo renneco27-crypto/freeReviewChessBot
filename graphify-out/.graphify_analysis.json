@@ -398,11 +398,6 @@
       "degree": 14
     },
     {
-      "id": "app_handlereviewmove",
-      "label": "handleReviewMove()",
-      "degree": 13
-    },
-    {
       "id": "chess_generate_moves",
       "label": "generate_moves()",
       "degree": 13
@@ -413,6 +408,16 @@
       "degree": 13
     },
     {
+      "id": "app_handlereviewmove",
+      "label": "handleReviewMove()",
+      "degree": 13
+    },
+    {
+      "id": "chessground_dropnewpiece",
+      "label": "dropNewPiece()",
+      "degree": 11
+    },
+    {
       "id": "app_gotomove",
       "label": "goToMove()",
       "degree": 11
@@ -421,19 +426,25 @@
       "id": "app_setenginestatus",
       "label": "setEngineStatus()",
       "degree": 11
-    },
-    {
-      "id": "app_handlebranchmove",
-      "label": "handleBranchMove()",
-      "degree": 11
     }
   ],
   "surprises": [
     {
-      "source": "showPromotionPicker()",
-      "target": "p()",
+      "source": "analyzePositionalFactors()",
+      "target": "file()",
       "source_files": [
         "app.js",
+        "chess.js"
+      ],
+      "confidence": "INFERRED",
+      "relation": "indirect_call",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "render$1()",
+      "target": "p()",
+      "source_files": [
+        "chessground.js",
         "stockfish.js"
       ],
       "confidence": "INFERRED",
@@ -441,11 +452,11 @@
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities"
     },
     {
-      "source": "analyzePositionalFactors()",
-      "target": "file()",
+      "source": "showPromotionPicker()",
+      "target": "p()",
       "source_files": [
         "app.js",
-        "chess.js"
+        "stockfish.js"
       ],
       "confidence": "INFERRED",
       "relation": "indirect_call",
@@ -463,21 +474,10 @@
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `switchImportTab()` unexpectedly reaches hub `p()`"
     },
     {
-      "source": "render$1()",
+      "source": "computePlan()",
       "target": "p()",
       "source_files": [
         "chessground.js",
-        "stockfish.js"
-      ],
-      "confidence": "INFERRED",
-      "relation": "indirect_call",
-      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities"
-    },
-    {
-      "source": "analyzePositionalFactors()",
-      "target": "f()",
-      "source_files": [
-        "app.js",
         "stockfish.js"
       ],
       "confidence": "INFERRED",

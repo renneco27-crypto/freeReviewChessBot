@@ -3219,9 +3219,16 @@ function stopMaiaMode() {
   maiaHistory = [];
   gameHistory = []; // Clear game history
   playerColor = 'white';
-  document.getElementById('coachPlayBtn').classList.remove('active-coach');
-  var playPosBtn = document.getElementById('playFromPosBtn');
-  if (playPosBtn) playPosBtn.textContent = '⚔️ Play Maia';
+  var coachBtn = document.getElementById('coachPlayBtn');
+  if (coachBtn) {
+    coachBtn.classList.remove('active-coach');
+    coachBtn.textContent = '⚔️ Play Maia vs Position';
+    if (currentMode === 'review') {
+      coachBtn.style.display = 'none';
+    } else {
+      coachBtn.style.display = 'inline-flex';
+    }
+  }
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
   document.getElementById('explorerToggleBtn').style.display = 'none';
@@ -3536,6 +3543,8 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
   function startCoach() {
     maiaMode = true;
     _self.classList.add('active-coach');
+    _self.textContent = '⏹ Stop Playing';
+    _self.style.display = 'inline-flex';
 
     // Player plays the side at the bottom (board orientation).
     // Orientation is set by the Flip button before clicking Play vs Coach.
@@ -3588,23 +3597,6 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
 
 // ── Suggest Best Move ──
 document.getElementById('suggestBtn').addEventListener('click', suggestBestMove);
-
-// ── Play Maia from Current Position Button ──
-var playPosBtn = document.getElementById('playFromPosBtn');
-if (playPosBtn) {
-  playPosBtn.addEventListener('click', function() {
-    if (maiaMode) {
-      stopMaiaMode();
-      this.textContent = '⚔️ Play Maia';
-      coachReset('Play vs Coach ended.');
-      return;
-    }
-    this.textContent = '⏹ Stop Playing';
-    document.getElementById('tabMaiaMode')?.classList.add('active');
-    document.getElementById('tabReviewMode')?.classList.remove('active');
-    document.getElementById('coachPlayBtn')?.click();
-  });
-}
 
 // ── TTS Toggle ──
 document.getElementById('ttsToggle').addEventListener('click', function() {
@@ -3822,12 +3814,17 @@ document.getElementById('tabReviewMode').addEventListener('click', function() {
   if (maiaMode) stopMaiaMode();
   currentMode = 'review';
   document.getElementById('importCard').style.display = 'block';
+  var coachBtn = document.getElementById('coachPlayBtn');
+  if (coachBtn) coachBtn.style.display = 'none';
 });
 document.getElementById('tabMaiaMode').addEventListener('click', function() {
   this.classList.add('active');
   document.getElementById('tabReviewMode').classList.remove('active');
+  currentMode = 'interactive';
+  var coachBtn = document.getElementById('coachPlayBtn');
+  if (coachBtn) coachBtn.style.display = 'inline-flex';
   if (!maiaMode) {
-    document.getElementById('coachPlayBtn')?.click();
+    coachBtn?.click();
   }
 });
 
