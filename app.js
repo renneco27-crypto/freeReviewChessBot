@@ -3881,20 +3881,41 @@ function animateSequenceTo(targetIdx) {
   stepNext();
 }
 
+function getLandmarkMoveIndices() {
+  if (!reviewData || !reviewData.landmarks || reviewData.landmarks.length === 0) return null;
+  var indices = [];
+  reviewData.landmarks.forEach(function(lm) {
+    for (var i = 0; i < moveHistory.length; i++) {
+      var mn = Math.floor(i / 2) + 1;
+      var color = (i % 2 === 0) ? 'White' : 'Black';
+      if (mn === lm.moveNumber && color === lm.color && moveHistory[i].san === lm.moveNotation) {
+        if (!indices.includes(i)) indices.push(i);
+        break;
+      }
+    }
+  });
+  return indices.sort(function(a, b) { return a - b; });
+}
+
 function isInterestingMove(idx) {
   if (idx < 0 || idx >= moveHistory.length) return false;
   var m = moveHistory[idx];
   if (!m) return false;
   var cls = (m.classification || '').toLowerCase();
   
-  // Tactical landmarks (blunders, mistakes, inaccuracies, brilliant, misses, great moves)
-  if (cls === 'brilliant' || cls === 'blunder' || cls === 'mistake' || cls === 'inaccuracy' || cls === 'miss' || cls === 'great') {
+  // Tactical landmarks that genuinely flip or define the game
+  if (cls === 'brilliant' || cls === 'blunder' || cls === 'miss' || cls === 'great') {
     return true;
   }
   
-  // Graph fluctuations (eval swing >= 1.5 pawns)
   var swing = Math.abs((m.evalAfter || 0) - (m.evalBefore || 0));
-  if (swing >= 1.5 || (m.evalSwing && m.evalSwing >= 1.5)) {
+  // Mistakes only if swing >= 1.5 pawns
+  if (cls === 'mistake' && (swing >= 1.5 || (m.evalSwing && m.evalSwing >= 1.5))) {
+    return true;
+  }
+  
+  // Major eval swing (graph fluctuation) >= 2.0 pawns
+  if (swing >= 2.0 || (m.evalSwing && m.evalSwing >= 2.0)) {
     return true;
   }
   
@@ -3902,18 +3923,35 @@ function isInterestingMove(idx) {
 }
 
 function findPrevInterestingMove(currentIdx) {
+  var lmIndices = getLandmarkMoveIndices();
+  if (lmIndices && lmIndices.length > 0) {
+    var start = (currentIdx === -1) ? moveHistory.length : currentIdx;
+    for (var i = lmIndices.length - 1; i >= 0; i--) {
+      if (lmIndices[i] < start) return lmIndices[i];
+    }
+    return 0;
+  }
+
   var startIdx = (currentIdx === -1) ? moveHistory.length : currentIdx;
   for (var i = startIdx - 1; i >= 0; i--) {
     if (isInterestingMove(i)) return i;
   }
-  return 0; // fallback to first move
+  return 0;
 }
 
 function findNextInterestingMove(currentIdx) {
+  var lmIndices = getLandmarkMoveIndices();
+  if (lmIndices && lmIndices.length > 0) {
+    for (var i = 0; i < lmIndices.length; i++) {
+      if (lmIndices[i] > currentIdx) return lmIndices[i];
+    }
+    return moveHistory.length - 1;
+  }
+
   for (var i = currentIdx + 1; i < moveHistory.length; i++) {
     if (isInterestingMove(i)) return i;
   }
-  return moveHistory.length - 1; // fallback to final move
+  return moveHistory.length - 1;
 }
 
 document.getElementById('firstMoveBtn').addEventListener('click', function() {
