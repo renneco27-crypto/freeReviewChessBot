@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>/ — graphify tree viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0 0 24px;
+      font-size: 2.2rem;
+      font-weight: bold;
+      color: #1e3a56;
+    }
+    .controls {
+      margin: 20px 0 15px 24px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 8px 18px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:active {
+      background: #004085;
+    }
+    #tree-container {
+      width: calc(100vw - 48px); /* Adjust for body margin/padding */
+      height: 85vh;
+      overflow: auto;
+      border-radius: 8px;
+      background: #fff;
+      margin-left: 24px;
+      margin-right: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #ddd;
+    }
+    svg {
+      background: #fff;
+      border-radius: 8px;
+      display: block; /* Important for D3 */
+    }
+    .node circle {
+      stroke-width: 2.5px;
+    }
+    .node text { /* Base style for the <text> container */
+      font: 13px 'Segoe UI', sans-serif;
+      paint-order: stroke fill; /* Ensures text is readable over lines */
+      stroke: #fff; /* White halo */
+      stroke-width: 3px; /* Halo thickness */
+      stroke-linejoin: round;
+      stroke-opacity: 0.85; /* Halo opacity */
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.7;
+      stroke-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>/ — Knowledge Graph</h1>
+  <div class="controls">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()">Reset View</button>
+  </div>
+  <div id="tree-container">
+    <svg id="tree-svg" width="6000" height="8000"></svg>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const initialJsonData = {"name":"/","total_count":301,"children":[{"name":"app.js","total_count":106,"children":[{"name":"_initVoice()","total_count":1,"children":[]},{"name":"_speakBrowser()","total_count":1,"children":[]},{"name":"_speakEdgeTTS()","total_count":1,"children":[]},{"name":"advanceToLandmark()","total_count":1,"children":[]},{"name":"analyzePositionalFactors()","total_count":1,"children":[]},{"name":"buildGameItem()","total_count":1,"children":[]},{"name":"buildMaiaInputTensor()","total_count":1,"children":[]},{"name":"buildMaiaMoveVocab()","total_count":1,"children":[]},{"name":"buildRefutationNarration()","total_count":1,"children":[]},{"name":"cancelReview()","total_count":1,"children":[]},{"name":"cancelTTS()","total_count":1,"children":[]},{"name":"checkDrawConditions()","total_count":1,"children":[]},{"name":"classifyAndPushMove()","total_count":1,"children":[]},{"name":"classifyMove()","total_count":1,"children":[]},{"name":"clearMistakeUI()","total_count":1,"children":[]},{"name":"coachProgress()","total_count":1,"children":[]},{"name":"coachReset()","total_count":1,"children":[]},{"name":"createAnalysisPool()","total_count":1,"children":[]},{"name":"deleteBranch()","total_count":1,"children":[]},{"name":"deleteBranchesAt()","total_count":1,"children":[]},{"name":"detectBrilliantSacrifice()","total_count":1,"children":[]},{"name":"doMaiaResponse()","total_count":1,"children":[]},{"name":"doSync()","total_count":1,"children":[]},{"name":"doUpdateExplorer()","total_count":1,"children":[]},{"name":"drawGraph()","total_count":1,"children":[]},{"name":"eloToTemp()","total_count":1,"children":[]},{"name":"endReview()","total_count":1,"children":[]},{"name":"evalPosition()","total_count":1,"children":[]},{"name":"explorerFetchOpts()","total_count":1,"children":[]},{"name":"fetchExplorerMoves()","total_count":1,"children":[]},{"name":"fetchOpening()","total_count":1,"children":[]},{"name":"finishMaiaGame()","total_count":1,"children":[]},{"name":"finishReview()","total_count":1,"children":[]},{"name":"genBranchId()","total_count":1,"children":[]},{"name":"generateReviewCommentary()","total_count":1,"children":[]},{"name":"getApiToken()","total_count":1,"children":[]},{"name":"getLegalDests()","total_count":1,"children":[]},{"name":"getMaiaMove()","total_count":1,"children":[]},{"name":"getMaiaTopMoves()","total_count":1,"children":[]},{"name":"getThresh()","total_count":1,"children":[]},{"name":"goToBranch()","total_count":1,"children":[]},{"name":"goToMove()","total_count":1,"children":[]},{"name":"handleBranchMove()","total_count":1,"children":[]},{"name":"handleReviewMove()","total_count":1,"children":[]},{"name":"hideSfPreview()","total_count":1,"children":[]},{"name":"initBoard()","total_count":1,"children":[]},{"name":"initEngine()","total_count":1,"children":[]},{"name":"initMaiaSession()","total_count":1,"children":[]},{"name":"isInsufficientMaterial()","total_count":1,"children":[]},{"name":"isPromotionMove()","total_count":1,"children":[]},{"name":"isSquareAttacked()","total_count":1,"children":[]},{"name":"jumpToLandmark()","total_count":1,"children":[]},{"name":"loadApiToken()","total_count":1,"children":[]},{"name":"loadOrtAndInit()","total_count":1,"children":[]},{"name":"loadRatingPref()","total_count":1,"children":[]},{"name":"mirrorFen()","total_count":1,"children":[]},{"name":"mirrorSq()","total_count":1,"children":[]},{"name":"mirrorUci()","total_count":1,"children":[]},{"name":"normalizeRatingToLichessBucket()","total_count":1,"children":[]},{"name":"onMaiaUserMove()","total_count":1,"children":[]},{"name":"onMove()","total_count":1,"children":[]},{"name":"onMoveWithPromotion()","total_count":1,"children":[]},{"name":"parseLines()","total_count":1,"children":[]},{"name":"pickMsg()","total_count":1,"children":[]},{"name":"promoteBranch()","total_count":1,"children":[]},{"name":"readSan()","total_count":1,"children":[]},{"name":"recordPosition()","total_count":1,"children":[]},{"name":"renderExplorer()","total_count":1,"children":[]},{"name":"renderHistory()","total_count":1,"children":[]},{"name":"renderSyncGames()","total_count":1,"children":[]},{"name":"runGameReview()","total_count":1,"children":[]},{"name":"sampleFromLogits()","total_count":1,"children":[]},{"name":"saveApiToken()","total_count":1,"children":[]},{"name":"saveRatingPref()","total_count":1,"children":[]},{"name":"setEngineStatus()","total_count":1,"children":[]},{"name":"showBranchPopover()","total_count":1,"children":[]},{"name":"showLandmark()","total_count":1,"children":[]},{"name":"showPromotionPicker()","total_count":1,"children":[]},{"name":"showRefutation()","total_count":1,"children":[]},{"name":"showSfPreview()","total_count":1,"children":[]},{"name":"showTakeaway()","total_count":1,"children":[]},{"name":"speakText()","total_count":1,"children":[]},{"name":"speakTextWithCb()","total_count":1,"children":[]},{"name":"startCoach()","total_count":1,"children":[]},{"name":"startLandmarkPlayback()","total_count":1,"children":[]},{"name":"startMaiaGame()","total_count":1,"children":[]},{"name":"staticFallback()","total_count":1,"children":[]},{"name":"stopMaiaMode()","total_count":1,"children":[]},{"name":"stopRefutationReplay()","total_count":1,"children":[]},{"name":"suggestBestMove()","total_count":1,"children":[]},{"name":"switchImportTab()","total_count":1,"children":[]},{"name":"toColor()","total_count":1,"children":[]},{"name":"toCp()","total_count":1,"children":[]},{"name":"tokenizeBoard()","total_count":1,"children":[]},{"name":"triggerFx()","total_count":1,"children":[]},{"name":"tryParseUciMove()","total_count":1,"children":[]},{"name":"typewrite()","total_count":1,"children":[]},{"name":"undoDeleteBranch()","total_count":1,"children":[]},{"name":"updateBoard()","total_count":1,"children":[]},{"name":"updateCoach()","total_count":1,"children":[]},{"name":"updateEvalDisplay()","total_count":1,"children":[]},{"name":"updateExplorer()","total_count":1,"children":[]},{"name":"updateLandmarkCounter()","total_count":1,"children":[]},{"name":"updateMoveHighlight()","total_count":1,"children":[]},{"name":"updateNavDisplay()","total_count":1,"children":[]},{"name":"updateUndoBtn()","total_count":1,"children":[]}]},{"name":"chess.js","total_count":42,"children":[{"name":"algebraic()","total_count":1,"children":[]},{"name":"ascii()","total_count":1,"children":[]},{"name":"attacked()","total_count":1,"children":[]},{"name":"build_move()","total_count":1,"children":[]},{"name":"clear()","total_count":1,"children":[]},{"name":"clone()","total_count":1,"children":[]},{"name":"file()","total_count":1,"children":[]},{"name":"FIXME: these var's are hoisted into function scope, this will need","total_count":1,"children":[]},{"name":"generate_fen()","total_count":1,"children":[]},{"name":"generate_moves()","total_count":1,"children":[]},{"name":"get()","total_count":1,"children":[]},{"name":"get_disambiguator()","total_count":1,"children":[]},{"name":"in_check()","total_count":1,"children":[]},{"name":"in_checkmate()","total_count":1,"children":[]},{"name":"in_stalemate()","total_count":1,"children":[]},{"name":"in_threefold_repetition()","total_count":1,"children":[]},{"name":"infer_piece_type()","total_count":1,"children":[]},{"name":"insufficient_material()","total_count":1,"children":[]},{"name":"is_digit()","total_count":1,"children":[]},{"name":"king_attacked()","total_count":1,"children":[]},{"name":"load()","total_count":1,"children":[]},{"name":"make_move()","total_count":1,"children":[]},{"name":"make_pretty()","total_count":1,"children":[]},{"name":"mask()","total_count":1,"children":[]},{"name":"move_from_san()","total_count":1,"children":[]},{"name":"move_to_san()","total_count":1,"children":[]},{"name":"NOTE: Some positions and moves may be ambiguous when using the","total_count":1,"children":[]},{"name":"parse_pgn_header()","total_count":1,"children":[]},{"name":"perft()","total_count":1,"children":[]},{"name":"prune_comments()","total_count":1,"children":[]},{"name":"push()","total_count":1,"children":[]},{"name":"put()","total_count":1,"children":[]},{"name":"rank()","total_count":1,"children":[]},{"name":"remove()","total_count":1,"children":[]},{"name":"reset()","total_count":1,"children":[]},{"name":"set_header()","total_count":1,"children":[]},{"name":"stripped_san()","total_count":1,"children":[]},{"name":"swap_color()","total_count":1,"children":[]},{"name":"trim()","total_count":1,"children":[]},{"name":"undo_move()","total_count":1,"children":[]},{"name":"update_setup()","total_count":1,"children":[]},{"name":"validate_fen()","total_count":1,"children":[]}]},{"name":"chessground.js","total_count":107,"children":[{"name":"addShape()","total_count":1,"children":[]},{"name":"addSquare()","total_count":1,"children":[]},{"name":"animate()","total_count":1,"children":[]},{"name":"appendValue()","total_count":1,"children":[]},{"name":"applyAnimation()","total_count":1,"children":[]},{"name":"arrowMargin()","total_count":1,"children":[]},{"name":"baseMove()","total_count":1,"children":[]},{"name":"baseNewPiece()","total_count":1,"children":[]},{"name":"baseUserMove()","total_count":1,"children":[]},{"name":"bindBoard()","total_count":1,"children":[]},{"name":"bindDocument()","total_count":1,"children":[]},{"name":"callUserFunction()","total_count":1,"children":[]},{"name":"cancel$1()","total_count":1,"children":[]},{"name":"cancel()","total_count":1,"children":[]},{"name":"cancelDropMode()","total_count":1,"children":[]},{"name":"cancelMove()","total_count":1,"children":[]},{"name":"canDrop()","total_count":1,"children":[]},{"name":"canPredrop()","total_count":1,"children":[]},{"name":"Chessground()","total_count":1,"children":[]},{"name":"circleWidth()","total_count":1,"children":[]},{"name":"clear()","total_count":1,"children":[]},{"name":"computePlan()","total_count":1,"children":[]},{"name":"computeSquareCenter()","total_count":1,"children":[]},{"name":"computeSquareClasses()","total_count":1,"children":[]},{"name":"configure()","total_count":1,"children":[]},{"name":"createElement()","total_count":1,"children":[]},{"name":"customSvgHash()","total_count":1,"children":[]},{"name":"debounceRedraw()","total_count":1,"children":[]},{"name":"deepMerge()","total_count":1,"children":[]},{"name":"defaults()","total_count":1,"children":[]},{"name":"dragNewPiece()","total_count":1,"children":[]},{"name":"drop()","total_count":1,"children":[]},{"name":"dropNewPiece()","total_count":1,"children":[]},{"name":"end$1()","total_count":1,"children":[]},{"name":"end()","total_count":1,"children":[]},{"name":"eventBrush()","total_count":1,"children":[]},{"name":"explosion()","total_count":1,"children":[]},{"name":"getKeyAtDomPos()","total_count":1,"children":[]},{"name":"getSnappedKeyAtDomPos()","total_count":1,"children":[]},{"name":"isDraggable()","total_count":1,"children":[]},{"name":"isMovable()","total_count":1,"children":[]},{"name":"isPlainObject()","total_count":1,"children":[]},{"name":"isPremovable()","total_count":1,"children":[]},{"name":"lineWidth()","total_count":1,"children":[]},{"name":"makeCustomBrush()","total_count":1,"children":[]},{"name":"memo()","total_count":1,"children":[]},{"name":"modifiersHash()","total_count":1,"children":[]},{"name":"move$1()","total_count":1,"children":[]},{"name":"move()","total_count":1,"children":[]},{"name":"onChange()","total_count":1,"children":[]},{"name":"opacity()","total_count":1,"children":[]},{"name":"orient()","total_count":1,"children":[]},{"name":"pieceCloseTo()","total_count":1,"children":[]},{"name":"pieceElementByKey()","total_count":1,"children":[]},{"name":"pieceHash()","total_count":1,"children":[]},{"name":"playPredrop()","total_count":1,"children":[]},{"name":"playPremove()","total_count":1,"children":[]},{"name":"pos2user()","total_count":1,"children":[]},{"name":"posZIndex()","total_count":1,"children":[]},{"name":"premove()","total_count":1,"children":[]},{"name":"processDrag()","total_count":1,"children":[]},{"name":"processDraw()","total_count":1,"children":[]},{"name":"read()","total_count":1,"children":[]},{"name":"removeDragElements()","total_count":1,"children":[]},{"name":"removeNodes()","total_count":1,"children":[]},{"name":"render$1()","total_count":1,"children":[]},{"name":"render$2()","total_count":1,"children":[]},{"name":"render()","total_count":1,"children":[]},{"name":"renderArrow()","total_count":1,"children":[]},{"name":"renderCircle()","total_count":1,"children":[]},{"name":"renderCoords()","total_count":1,"children":[]},{"name":"renderCustomSvg()","total_count":1,"children":[]},{"name":"renderMarker()","total_count":1,"children":[]},{"name":"renderResized$1()","total_count":1,"children":[]},{"name":"renderResized()","total_count":1,"children":[]},{"name":"renderShape$1()","total_count":1,"children":[]},{"name":"renderShape()","total_count":1,"children":[]},{"name":"renderSvg()","total_count":1,"children":[]},{"name":"renderWrap()","total_count":1,"children":[]},{"name":"reset()","total_count":1,"children":[]},{"name":"rookFilesOf()","total_count":1,"children":[]},{"name":"selectSquare()","total_count":1,"children":[]},{"name":"setAttributes()","total_count":1,"children":[]},{"name":"setCheck()","total_count":1,"children":[]},{"name":"setDropMode()","total_count":1,"children":[]},{"name":"setPieces()","total_count":1,"children":[]},{"name":"setPredrop()","total_count":1,"children":[]},{"name":"setPremove()","total_count":1,"children":[]},{"name":"setSelected()","total_count":1,"children":[]},{"name":"setStage()","total_count":1,"children":[]},{"name":"shapeHash()","total_count":1,"children":[]},{"name":"start$1()","total_count":1,"children":[]},{"name":"start$2()","total_count":1,"children":[]},{"name":"start()","total_count":1,"children":[]},{"name":"step()","total_count":1,"children":[]},{"name":"stop()","total_count":1,"children":[]},{"name":"syncDefs()","total_count":1,"children":[]},{"name":"syncShapes()","total_count":1,"children":[]},{"name":"toggleOrientation()","total_count":1,"children":[]},{"name":"tryAutoCastle()","total_count":1,"children":[]},{"name":"unbindable()","total_count":1,"children":[]},{"name":"unselect()","total_count":1,"children":[]},{"name":"unsetPredrop()","total_count":1,"children":[]},{"name":"unsetPremove()","total_count":1,"children":[]},{"name":"updateBounds()","total_count":1,"children":[]},{"name":"userMove()","total_count":1,"children":[]},{"name":"write()","total_count":1,"children":[]}]},{"name":"export_maia3.py","total_count":2,"children":[{"name":"Args","total_count":1,"children":[]},{"name":"Export Maia3-5M PyTorch model to ONNX for browser inference.","total_count":1,"children":[]}]},{"name":"package.json","total_count":18,"children":[{"name":"author","total_count":1,"children":[]},{"name":"chess","total_count":1,"children":[]},{"name":"chess-coach","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"game-review","total_count":1,"children":[]},{"name":"keywords","total_count":1,"children":[]},{"name":"license","total_count":1,"children":[]},{"name":"maia","total_count":1,"children":[]},{"name":"main","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"onnx","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"serve","total_count":1,"children":[]},{"name":"start","total_count":1,"children":[]},{"name":"stockfish","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"wasm","total_count":1,"children":[]}]},{"name":"server.js","total_count":6,"children":[{"name":"createServer()","total_count":1,"children":[]},{"name":"fs","total_count":1,"children":[]},{"name":"http","total_count":1,"children":[]},{"name":"MIME_TYPES","total_count":1,"children":[]},{"name":"path","total_count":1,"children":[]},{"name":"PORT","total_count":1,"children":[]}]},{"name":"server.py","total_count":6,"children":[{"name":".do_GET()","total_count":1,"children":[]},{"name":".do_HEAD()","total_count":1,"children":[]},{"name":".end_headers()","total_count":1,"children":[]},{"name":".guess_type()","total_count":1,"children":[]},{"name":".is_path_forbidden()","total_count":1,"children":[]},{"name":"Handler","total_count":1,"children":[]}]},{"name":"stockfish.js","total_count":6,"children":[{"name":"d()","total_count":1,"children":[]},{"name":"f()","total_count":1,"children":[]},{"name":"l()","total_count":1,"children":[]},{"name":"n()","total_count":1,"children":[]},{"name":"o()","total_count":1,"children":[]},{"name":"p()","total_count":1,"children":[]}]},{"name":"testv1","total_count":8,"children":[{"name":"package.json","total_count":8,"children":[{"name":"chess.js","total_count":1,"children":[]},{"name":"chess.js","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"onnxruntime-web","total_count":1,"children":[]},{"name":"onnxruntime-web","total_count":1,"children":[]},{"name":"vite-plugin-static-copy","total_count":1,"children":[]},{"name":"vite-plugin-static-copy","total_count":1,"children":[]}]}]}]};
+
+    function transformData(jsonData) {
+        // Helper function to recursively build the children structure
+        function processNode(node, parentL1StageName) {
+            let displayName = node.name;
+            // Append total_count if it exists and is not already in the name
+            if (node.total_count !== undefined) {
+                if (!/\(Total Count: \d+\)$/.test(displayName)) {
+                    displayName += ` (Total Count: ${node.total_count})`;
+                }
+            }
+
+            const newNode = { name: displayName };
+
+            if (parentL1StageName === "Root") {
+                 newNode.originalStageName = node.name;
+            } else {
+                newNode.originalStageName = parentL1StageName;
+            }
+
+            if (node.children && node.children.length > 0) {
+                const stageNameToPass = (parentL1StageName === "Root") ? node.name : parentL1StageName;
+                newNode.children = node.children.map(child => processNode(child, stageNameToPass));
+            }
+
+            return newNode;
+        }
+
+        let rootDisplayName = jsonData.name;
+        if (jsonData.total_count !== undefined && !/\(Total Count: \d+\)$/.test(rootDisplayName)) {
+            rootDisplayName += ` (Total Count: ${jsonData.total_count})`;
+        }
+
+        return {
+            name: rootDisplayName,
+            originalStageName: "Root",
+            children: (jsonData.children || []).map(child => processNode(child, "Root"))
+        };
+    }
+
+    const treeData = transformData(initialJsonData);
+
+    // Auto-populated phaseColors: every depth-1 child of the root gets
+    // a stable colour from a bigger palette so all top-level dirs are
+    // distinguishable.
+    const PALETTE = [
+      ["#3498DB","#2980B9","#AED6F1"], ["#2ECC71","#27AE60","#A9DFBF"],
+      ["#E74C3C","#C0392B","#F5B7B1"], ["#9B59B6","#8E44AD","#D7BDE2"],
+      ["#F39C12","#D68910","#FAD7A0"], ["#1ABC9C","#117864","#A2D9CE"],
+      ["#34495E","#1B2631","#ABB2B9"], ["#E67E22","#BA4A00","#F5CBA7"],
+      ["#16A085","#0E6655","#A2D9CE"], ["#D35400","#A04000","#EDBB99"],
+      ["#7F8C8D","#566573","#D5DBDB"], ["#C0392B","#7B241C","#F5B7B1"],
+      ["#2E86C1","#1B4F72","#A9CCE3"], ["#28B463","#196F3D","#A9DFBF"],
+      ["#AF7AC5","#6C3483","#D2B4DE"],
+    ];
+    const phaseColors = { "Root": { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+                          "Default": { fill: "#BDC3C7", stroke: "#95A5A6", collapsedFill: "#ECF0F1" } };
+    (initialJsonData.children || []).forEach((c, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      phaseColors[c.name] = { fill: pal[0], stroke: pal[1], collapsedFill: pal[2] };
+    });
+
+    const levelSpecificPalettes = {
+      0: { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+      2: { fill: "#6ab04c", stroke: "#508a38", collapsedFill: "#a3d391" },
+      3: { fill: "#f0932b", stroke: "#d0730f", collapsedFill: "#f6c07e" },
+      4: { fill: "#be2edd", stroke: "#a01cb3", collapsedFill: "#e08bf2" },
+      5: { fill: "#00a8ff", stroke: "#007ac1", collapsedFill: "#74d2ff" },
+      6: { fill: "#e55039", stroke: "#c23620", collapsedFill: "#f09a8d" },
+      default: { fill: "#747d8c", stroke: "#57606f", collapsedFill: "#a4b0be" }
+    };
+
+    const svgElement = d3.select("#tree-svg");
+    const initialSvgWidth = +svgElement.attr("width");
+    const initialSvgHeight = +svgElement.attr("height");
+    const margin = { top: 40, right: 120, bottom: 80, left: 450 };
+    let width = initialSvgWidth - margin.left - margin.right;
+    let height = initialSvgHeight - margin.top - margin.bottom;
+    const duration = 500;
+    let nodeCounter = 0;
+    const g = svgElement.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const treemap = d3.tree().nodeSize([40, 0]);
+    let rootNode = d3.hierarchy(treeData, d => d.children);
+    rootNode.x0 = 0;
+    rootNode.y0 = 0;
+
+    if (rootNode.children) {
+      rootNode.children.forEach(d_child => {
+        if (d_child.children) { collapseBranch(d_child); }
+      });
+    }
+    updateTree(rootNode);
+
+    function collapseBranch(d) { if (d.children) { d._children = d.children; d._children.forEach(collapseBranch); d.children = null; } }
+    function expandBranch(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) { d.children.forEach(expandBranch); } }
+    window.expandAll = () => { expandBranch(rootNode); updateTree(rootNode); };
+    window.collapseAll = () => { if (rootNode.children) { rootNode.children.forEach(collapseBranch); } updateTree(rootNode); };
+    window.resetView = () => { if (rootNode.children) { rootNode.children.forEach(d_child => { if (d_child.children || d_child._children) { collapseBranch(d_child); } }); } if (rootNode._children && !rootNode.children) { rootNode.children = rootNode._children; rootNode._children = null; } updateTree(rootNode); };
+
+    function updateTree(source) {
+      const treeLayoutData = treemap(rootNode);
+      let nodes = treeLayoutData.descendants();
+      let links = treeLayoutData.descendants().slice(1);
+
+      let minX = 0;
+      let maxX = 0;
+      if (nodes.length > 0) {
+        minX = d3.min(nodes, d => d.x);
+        maxX = d3.max(nodes, d => d.x);
+      }
+
+      let neededHeight = Math.max(initialSvgHeight, maxX - minX + margin.top + margin.bottom + 100);
+      svgElement.transition().duration(duration / 2).attr("height", neededHeight);
+      g.transition().duration(duration / 2).attr("transform", `translate(${margin.left},${margin.top - minX + 40})`);
+
+      nodes.forEach(d => { d.y = d.depth * 400; }); // Adjust horizontal separation if needed
+
+      const node = g.selectAll('g.node').data(nodes, d => d.id || (d.id = ++nodeCounter));
+      const nodeEnter = node.enter().append('g')
+        .attr('class', d => "node" + (d.children || d._children ? " node--internal" : " node--leaf") + (d._children ? " _children" : ""))
+        .attr('transform', d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => { if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+        .style('cursor', d => (d.children || d._children) ? 'pointer' : 'default');
+
+      nodeEnter.append('circle').attr('r', 1e-6);
+
+      nodeEnter.append('text')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -14 : 14)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .style("fill-opacity", 1e-6)
+        .call(wrapText, 380);
+
+      const nodeUpdate = nodeEnter.merge(node);
+      nodeUpdate.transition().duration(duration)
+        .attr('transform', d => `translate(${d.y},${d.x})`)
+        .attr('class', d => "node" + (d.children ? " node--internal" : " node--leaf") + (d._children ? " node--internal _children" : ""));
+
+      nodeUpdate.select('circle').attr('r', 8.5)
+        .style('fill', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            if (d._children) return palette.collapsedFill;
+            if (d.children) return palette.fill;
+            return "#fff";
+        })
+        .style('stroke', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            return palette.stroke;
+        });
+      nodeUpdate.select('text').style("fill-opacity", 1).call(wrapText, 380);
+
+      const nodeExit = node.exit().transition().duration(duration).attr('transform', d => `translate(${source.y},${source.x})`).remove();
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      const link = g.selectAll('path.link').data(links, d => d.id);
+      const linkEnter = link.enter().insert('path', "g").attr('class', 'link').attr('d', d => { const o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+      linkEnter.merge(link).transition().duration(duration).attr('d', d => diagonal(d, d.parent))
+        .style('stroke', d => {
+            const sourceNode = d.parent;
+            if (!sourceNode) return phaseColors.Default.stroke;
+            const l1AncestorName = sourceNode.data.originalStageName;
+            const colorPalette = phaseColors[l1AncestorName] || phaseColors.Default;
+            return colorPalette.stroke;
+        });
+      link.exit().transition().duration(duration).attr('d', d => { const o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+      nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function diagonal(s, d) { return `M ${s.y} ${s.x} C ${(s.y + d.y) / 2} ${s.x}, ${(s.y + d.y) / 2} ${d.x}, ${d.y} ${d.x}`; }
+
+    function wrapText(textElements, maxWidth) {
+        const textPartColors = {
+            name: '#343a40',
+            count: '#0056b3'
+        };
+        const countRegex = /(\s\(Total Count: \d+\))$/;
+
+        textElements.each(function () {
+            const textD3 = d3.select(this);
+            const originalNodeText = textD3.datum().data.name;
+            const x = parseFloat(textD3.attr("x") || 0);
+            const initialDy = textD3.attr("dy");
+            const textAnchor = textD3.attr("text-anchor");
+            const lineHeight = 1.1;
+
+            textD3.text(null);
+
+            let namePart = originalNodeText;
+            let countPartText = "";
+
+            const countMatch = originalNodeText.match(countRegex);
+            if (countMatch && originalNodeText.endsWith(countMatch[0])) {
+                namePart = originalNodeText.substring(0, originalNodeText.length - countMatch[0].length).trim();
+                countPartText = countMatch[0].trim();
+            }
+
+            const tokens = [];
+            namePart.split(/\s+/).filter(Boolean).forEach(word => {
+                tokens.push({ text: word, type: 'name' });
+            });
+            if (countPartText) {
+                tokens.push({ text: countPartText, type: 'count' });
+            }
+
+            if (tokens.length === 0 && originalNodeText) {
+                tokens.push({ text: originalNodeText, type: 'name' });
+            }
+
+            let currentTspan = textD3.append("tspan").attr("x", x).attr("dy", initialDy);
+            if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+
+            let lineTokens = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const tokenObj = tokens[i];
+
+                lineTokens.push(tokenObj);
+                currentTspan.text(lineTokens.map(t => t.text).join(" "));
+
+                if (currentTspan.node().getComputedTextLength() > maxWidth && lineTokens.length > 1) {
+                    lineTokens.pop();
+
+                    currentTspan.text(null);
+                    lineTokens.forEach((prevToken, idx) => {
+                        currentTspan.append("tspan")
+                            .text((idx > 0 ? " " : "") + prevToken.text)
+                            .style("fill", textPartColors[prevToken.type] || textPartColors.name)
+                            .style("font-weight", prevToken.type === 'count' ? "bold" : "normal");
+                    });
+
+                    lineTokens = [tokenObj];
+                    currentTspan = textD3.append("tspan").attr("x", x).attr("dy", lineHeight + "em");
+                    if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+                }
+            }
+
+            currentTspan.text(null);
+            lineTokens.forEach((token, idx) => {
+                currentTspan.append("tspan")
+                    .text((idx > 0 ? " " : "") + token.text)
+                    .style("fill", textPartColors[token.type] || textPartColors.name)
+                    .style("font-weight", token.type === 'count' ? "bold" : "normal");
+            });
+
+            if (textD3.selectAll("tspan > tspan").empty() && textD3.select("tspan").text().length === 0 && originalNodeText) {
+                let t = textD3.select("tspan");
+                let displayText = originalNodeText;
+                t.text(displayText).style("fill", textPartColors.name);
+                if (t.node() && t.node().getComputedTextLength() > maxWidth && displayText.length > 20) {
+                    let estimatedChars = Math.floor(maxWidth / (t.node().getComputedTextLength()/displayText.length) );
+                    displayText = displayText.substring(0, Math.max(0, estimatedChars - 3)) + "...";
+                    t.text(displayText);
+                }
+            }
+        });
+    }
+  </script>
+</body>
+</html>
