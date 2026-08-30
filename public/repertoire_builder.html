@@ -181,6 +181,9 @@
     cursor: pointer;
     transition: all 0.15s;
   }
+  .line-card * {
+    pointer-events: none;
+  }
   .line-card:hover { border-color: var(--accent); background: #172131; transform: translateX(2px); }
   .line-card.active { border-color: var(--accent); background: #172a45; box-shadow: 0 0 0 1px var(--accent); }
   .line-header { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; }
@@ -956,23 +959,39 @@ function previewVariationEnd(lineNodes, name) {
   if (isPracticeMode) return;
   if (!lineNodes || lineNodes.length === 0) return;
   const lastNode = lineNodes[lineNodes.length - 1];
-  if (!lastNode || !lastNode.fen) return;
+  if (!lastNode) return;
   isHoverPreviewing = true;
   
-  const previewChess = new Chess(lastNode.fen);
-  
+  let finalFen = lastNode.fen;
   let moveSquares = [];
-  if (lineNodes.length >= 2) {
-    try {
-      const prevFen = lineNodes[lineNodes.length - 2].fen;
-      const prevChess = new Chess(prevFen);
-      const legal = prevChess.moves({ verbose: true });
-      const moveMatch = legal.find(m => m.san === lastNode.san);
-      if (moveMatch) moveSquares = [moveMatch.from, moveMatch.to];
-    } catch(e) {}
+  
+  if (lastNode.from && lastNode.to) {
+    moveSquares = [lastNode.from, lastNode.to];
   }
 
-  renderBoardCustom(previewChess, moveSquares, `👁️ End of Line Preview: ${name} (${lastNode.san} - Ply ${lineNodes.length})`);
+  // If fen missing or needed, simulate full sequence
+  if (!finalFen) {
+    const sim = new Chess();
+    for (let node of lineNodes) {
+      try {
+        const m = sim.move(node.san);
+        if (m) {
+          node.fen = sim.fen();
+          node.from = m.from;
+          node.to = m.to;
+          moveSquares = [m.from, m.to];
+        }
+      } catch(e) {}
+    }
+    finalFen = sim.fen();
+  }
+
+  const previewChess = new Chess(finalFen);
+  const plyNum = lineNodes.length;
+  const moveNum = Math.ceil(plyNum / 2);
+  const movePrefix = plyNum % 2 === 1 ? `${moveNum}.` : `${moveNum}...`;
+
+  renderBoardCustom(previewChess, moveSquares, `👁️ End of Line: ${name} (${movePrefix} ${lastNode.san})`);
 }
 
 function cancelPreviewCandidateMove() {
@@ -1044,13 +1063,15 @@ function renderBoardCustom(customChess, customLastMoves = [], indicatorText = nu
 // PGN MULTI-VARIATION TREE DECOMPILER
 // ----------------------------------------------------
 class TreeNode {
-  constructor(san = null, parent = null, ply = 0, fen = "", comment = "") {
+  constructor(san = null, parent = null, ply = 0, fen = "", comment = "", from = null, to = null) {
     this.san = san;
     this.parent = parent;
     this.children = [];
     this.comment = comment;
     this.ply = ply;
     this.fen = fen;
+    this.from = from;
+    this.to = to;
   }
 }
 
@@ -1096,16 +1117,21 @@ function decompilePgn(rawText) {
     } else if (token.type === 'comment' && token.val) {
       if (curr) curr.comment = token.val.replace(/^\{|\}$/g, '').trim();
     } else if (token.type === 'san' && token.val) {
+      let sanMove = token.val.replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
       const branchSim = new Chess(curr.fen);
       try {
-        const m = branchSim.move(token.val);
+        const m = branchSim.move(sanMove);
         if (m) {
-          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen());
+          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen(), "", m.from, m.to);
+          curr.children.push(node);
+          stack[stack.length - 1] = node;
+        } else {
+          const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
           curr.children.push(node);
           stack[stack.length - 1] = node;
         }
       } catch (err) {
-        const node = new TreeNode(token.val, curr, curr.ply + 1, curr.fen);
+        const node = new TreeNode(sanMove, curr, curr.ply + 1, curr.fen);
         curr.children.push(node);
         stack[stack.length - 1] = node;
       }
@@ -1140,17 +1166,29 @@ let activeSubsetBranch = null;
 function getTopLevelBranchGroups() {
   const groups = {};
   decompiledLines.forEach((lineNodes, idx) => {
+    // Determine the major branch category from first 8 plies
     const fullMovesStr = formatLineMoves(lineNodes);
-    const branchName = classifyOpeningName(fullMovesStr, idx + 1);
+    let categoryName = "Scotch Game Main";
     
-    if (!groups[branchName]) {
-      groups[branchName] = {
-        name: branchName,
+    if (fullMovesStr.includes('Bc5') || fullMovesStr.includes('4... Bc5')) categoryName = 'Scotch: Classical (4...Bc5)';
+    else if (fullMovesStr.includes('Bb4+') || fullMovesStr.includes('4... Bb4+')) categoryName = 'Scotch: Mieses / Bb4+';
+    else if (fullMovesStr.includes('4... Nxd4 5. Qxd4') || fullMovesStr.includes('Nxd4 5. Qxd4')) categoryName = 'Scotch: 4...Nxd4 5. Qxd4';
+    else if (fullMovesStr.includes('3... d6')) categoryName = 'Scotch: 3...d6 Philidor';
+    else if (fullMovesStr.includes('3... Nf6') || fullMovesStr.includes('4... Nf6')) categoryName = 'Scotch: Two Knights Counter';
+    else if (fullMovesStr.includes('3... f6')) categoryName = 'Scotch: 3...f6';
+    else if (fullMovesStr.includes('3... d5')) categoryName = 'Scotch: 3...d5 Gambit';
+    else if (fullMovesStr.includes('3... Bb4+')) categoryName = 'Scotch: 3...Bb4+';
+    else if (fullMovesStr.includes('3... Nxd4')) categoryName = 'Scotch: 3...Nxd4';
+    else categoryName = `Branch Group ${idx + 1}`;
+    
+    if (!groups[categoryName]) {
+      groups[categoryName] = {
+        name: categoryName,
         indices: [],
         representativeNodes: lineNodes
       };
     }
-    groups[branchName].indices.push(idx);
+    groups[categoryName].indices.push(idx);
   });
   return Object.values(groups);
 }
@@ -1197,7 +1235,7 @@ function renderLinesList() {
         </div>
         <div class="line-moves">${moveStrings}</div>
         <div class="sub-branch-tag">
-          <span>Click to explore ${group.indices.length} subset lines →</span>
+          <span>Click to view ${group.indices.length} subset lines →</span>
         </div>
       `;
 
@@ -1246,7 +1284,7 @@ function renderLinesList() {
 
       card.innerHTML = `
         <div class="line-header">
-          <span class="line-title">${name} (Line #${idx + 1})</span>
+          <span class="line-title">${name}</span>
           <span>${lineNodes.length} plies</span>
         </div>
         <div class="line-moves">${moveStrings}</div>
@@ -1291,14 +1329,30 @@ function formatLineMoves(nodes, includeComments = false) {
 }
 
 function classifyOpeningName(moveStr, index) {
-  if (moveStr.includes('Bc5') || moveStr.includes('4... Bc5')) return 'Scotch: Classical (4...Bc5)';
-  if (moveStr.includes('Bb4') || moveStr.includes('4... Bb4+')) return 'Scotch: Mieses / Bb4+';
-  if (moveStr.includes('Nxd4 5. Qxd4') || moveStr.includes('4... Nxd4')) return 'Scotch: 4...Nxd4 5. Qxd4';
-  if (moveStr.includes('3... d6')) return 'Scotch: 3...d6 Philidor';
-  if (moveStr.includes('3... Nf6') || moveStr.includes('Nf6 4. Nxc6') || moveStr.includes('4... Nf6')) return 'Scotch: Two Knights Counter';
-  if (moveStr.includes('3... f6')) return 'Scotch: 3...f6';
-  if (moveStr.includes('3... d5')) return 'Scotch: 3...d5 Gambit';
-  return `Variation ${index}`;
+  let base = `Variation ${index}`;
+  if (moveStr.includes('4... Bc5') || moveStr.includes('Bc5')) base = 'Scotch: Classical (4...Bc5)';
+  else if (moveStr.includes('4... Bb4+') || moveStr.includes('Bb4')) base = 'Scotch: Mieses / Bb4+';
+  else if (moveStr.includes('4... Nxd4') || moveStr.includes('Nxd4 5. Qxd4')) base = 'Scotch: 4...Nxd4 5. Qxd4';
+  else if (moveStr.includes('3... d6')) base = 'Scotch: 3...d6 Philidor';
+  else if (moveStr.includes('3... Nf6') || moveStr.includes('4... Nf6')) base = 'Scotch: Two Knights Counter';
+  else if (moveStr.includes('3... f6')) base = 'Scotch: 3...f6';
+  else if (moveStr.includes('3... d5')) base = 'Scotch: 3...d5 Gambit';
+  else if (moveStr.includes('3... Bb4+')) base = 'Scotch: 3...Bb4+';
+  else if (moveStr.includes('3... Nxd4')) base = 'Scotch: 3...Nxd4';
+
+  if (moveStr.includes('Qxc5+')) return `${base} → 19. Qxc5+`;
+  if (moveStr.includes('18. Qd3')) return `${base} → 18. Qd3`;
+  if (moveStr.includes('16. Ne4')) return `${base} → 16. Ne4`;
+  if (moveStr.includes('6. e5 Nh5 7. g4')) return `${base} → 7. g4`;
+  if (moveStr.includes('23. Bxe6')) return `${base} → 23. Bxe6`;
+  if (moveStr.includes('21. Nd2')) return `${base} → 21. Nd2`;
+  if (moveStr.includes('14. g4')) return `${base} → 14. g4`;
+  if (moveStr.includes('10. O-O')) return `${base} → 10. O-O`;
+  if (moveStr.includes('8. Qd5')) return `${base} → 8. Qd5`;
+  if (moveStr.includes('11. Qxc5')) return `${base} → 11. Qxc5`;
+  if (moveStr.includes('7. a5')) return `${base} → 7. a5`;
+
+  return base;
 }
 
 // ----------------------------------------------------
