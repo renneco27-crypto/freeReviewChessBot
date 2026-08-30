@@ -501,7 +501,7 @@
       "source_location": "L36",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "start()",
       "id": "chessground_start"
     },
@@ -512,7 +512,7 @@
       "source_location": "L39",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "cancel()",
       "id": "chessground_cancel"
     },
@@ -545,7 +545,7 @@
       "source_location": "L120",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "rookfilesof()",
       "id": "chessground_rookfilesof"
     },
@@ -556,7 +556,7 @@
       "source_location": "L130",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "premove()",
       "id": "chessground_premove"
     },
@@ -611,7 +611,7 @@
       "source_location": "L172",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "setcheck()",
       "id": "chessground_setcheck"
     },
@@ -732,7 +732,7 @@
       "source_location": "L326",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "selectsquare()",
       "id": "chessground_selectsquare"
     },
@@ -743,7 +743,7 @@
       "source_location": "L346",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "setselected()",
       "id": "chessground_setselected"
     },
@@ -765,7 +765,7 @@
       "source_location": "L359",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "ismovable()",
       "id": "chessground_ismovable"
     },
@@ -787,7 +787,7 @@
       "source_location": "L371",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "ispremovable()",
       "id": "chessground_ispremovable"
     },
@@ -875,7 +875,7 @@
       "source_location": "L478",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "read()",
       "id": "chessground_read"
     },
@@ -886,7 +886,7 @@
       "source_location": "L517",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "write()",
       "id": "chessground_write"
     },
@@ -897,7 +897,7 @@
       "source_location": "L538",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "applyanimation()",
       "id": "chessground_applyanimation"
     },
@@ -908,7 +908,7 @@
       "source_location": "L546",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "configure()",
       "id": "chessground_configure"
     },
@@ -919,7 +919,7 @@
       "source_location": "L581",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "deepmerge()",
       "id": "chessground_deepmerge"
     },
@@ -930,7 +930,7 @@
       "source_location": "L591",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "isplainobject()",
       "id": "chessground_isplainobject"
     },
@@ -1007,7 +1007,7 @@
       "source_location": "L735",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "move$1()",
       "id": "chessground_move_1"
     },
@@ -1018,7 +1018,7 @@
       "source_location": "L739",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "end$1()",
       "id": "chessground_end_1"
     },
@@ -1029,7 +1029,7 @@
       "source_location": "L747",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "cancel$1()",
       "id": "chessground_cancel_1"
     },
@@ -1040,7 +1040,7 @@
       "source_location": "L753",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "clear()",
       "id": "chessground_clear"
     },
@@ -1062,7 +1062,7 @@
       "source_location": "L766",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "addshape()",
       "id": "chessground_addshape"
     },
@@ -1073,7 +1073,7 @@
       "source_location": "L779",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "onchange()",
       "id": "chessground_onchange"
     },
@@ -1128,7 +1128,7 @@
       "source_location": "L910",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "move()",
       "id": "chessground_move"
     },
@@ -1150,7 +1150,7 @@
       "source_location": "L969",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "removedragelements()",
       "id": "chessground_removedragelements"
     },
@@ -1194,7 +1194,7 @@
       "source_location": "L1094",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "defaults()",
       "id": "chessground_defaults"
     },
@@ -1205,7 +1205,7 @@
       "source_location": "L1180",
       "_callable": true,
       "_origin": "ast",
-      "community": 2,
+      "community": 18,
       "norm_label": "syncshapes()",
       "id": "chessground_syncshapes"
     },
@@ -1458,7 +1458,7 @@
       "source_location": "L1506",
       "_callable": true,
       "_origin": "ast",
-      "community": 15,
+      "community": 14,
       "norm_label": "setdropmode()",
       "id": "chessground_setdropmode"
     },
@@ -1502,7 +1502,7 @@
       "source_location": "L1554",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "binddocument()",
       "id": "chessground_binddocument"
     },
@@ -1513,7 +1513,7 @@
       "source_location": "L1573",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "unbindable()",
       "id": "chessground_unbindable"
     },
@@ -1546,7 +1546,7 @@
       "source_location": "L1753",
       "_callable": true,
       "_origin": "ast",
-      "community": 11,
+      "community": 2,
       "norm_label": "updatebounds()",
       "id": "chessground_updatebounds"
     },
@@ -1612,7 +1612,7 @@
       "source_location": "L1830",
       "_callable": true,
       "_origin": "ast",
-      "community": 2,
+      "community": 18,
       "norm_label": "render()",
       "id": "chessground_render"
     },
@@ -1634,7 +1634,7 @@
       "source_location": "L1850",
       "_callable": true,
       "_origin": "ast",
-      "community": 2,
+      "community": 18,
       "norm_label": "rendershape()",
       "id": "chessground_rendershape"
     },
@@ -1645,7 +1645,7 @@
       "source_location": "L1865",
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 11,
       "norm_label": "chessground()",
       "id": "chessground_chessground"
     },
@@ -1888,7 +1888,7 @@
       "source_file": "server.js",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "server.js",
       "id": "server_js_server"
     },
@@ -1898,7 +1898,7 @@
       "source_file": "server.js",
       "source_location": "L2",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "http",
       "id": "server_http"
     },
@@ -1908,7 +1908,7 @@
       "source_file": "server.js",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "fs",
       "id": "server_fs"
     },
@@ -1918,7 +1918,7 @@
       "source_file": "server.js",
       "source_location": "L4",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "path",
       "id": "server_path"
     },
@@ -1928,7 +1928,7 @@
       "source_file": "server.js",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "port",
       "id": "server_port"
     },
@@ -1938,7 +1938,7 @@
       "source_file": "server.js",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "mime_types",
       "id": "server_mime_types"
     },
@@ -1949,7 +1949,7 @@
       "source_location": "L21",
       "_callable": true,
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "createserver()",
       "id": "server_createserver"
     },
@@ -1959,7 +1959,7 @@
       "source_file": "server.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": "server.py",
       "id": "server_py_server"
     },
@@ -1971,7 +1971,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": "handler",
       "id": "server_handler"
     },
@@ -1982,7 +1982,7 @@
       "source_location": "L12",
       "_callable": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": ".guess_type()",
       "id": "server_handler_guess_type"
     },
@@ -1993,7 +1993,7 @@
       "source_location": "L18",
       "_callable": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": ".is_path_forbidden()",
       "id": "server_handler_is_path_forbidden"
     },
@@ -2004,7 +2004,7 @@
       "source_location": "L31",
       "_callable": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": ".do_get()",
       "id": "server_handler_do_get"
     },
@@ -2015,7 +2015,7 @@
       "source_location": "L55",
       "_callable": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": ".do_head()",
       "id": "server_handler_do_head"
     },
@@ -2026,7 +2026,7 @@
       "source_location": "L61",
       "_callable": true,
       "_origin": "ast",
-      "community": 18,
+      "community": 17,
       "norm_label": ".end_headers()",
       "id": "server_handler_end_headers"
     },
@@ -2112,7 +2112,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "testv1/package.json",
       "id": "testv1_package"
     },
@@ -2122,7 +2122,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L2",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "dependencies",
       "id": "testv1_package_dependencies"
     },
@@ -2132,7 +2132,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "chess.js",
       "id": "testv1_package_dependencies_chess_js"
     },
@@ -2142,7 +2142,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "chess.js",
       "id": "chess_js"
     },
@@ -2152,7 +2152,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L4",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "onnxruntime-web",
       "id": "testv1_package_dependencies_onnxruntime_web"
     },
@@ -2162,7 +2162,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L4",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "onnxruntime-web",
       "id": "onnxruntime_web"
     },
@@ -2172,7 +2172,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "devdependencies",
       "id": "testv1_package_devdependencies"
     },
@@ -2182,7 +2182,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L7",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "vite-plugin-static-copy",
       "id": "testv1_package_devdependencies_vite_plugin_static_copy"
     },
@@ -2192,7 +2192,7 @@
       "source_file": "testv1/package.json",
       "source_location": "L7",
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "vite-plugin-static-copy",
       "id": "vite_plugin_static_copy"
     },
@@ -2236,7 +2236,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_normalizeratingtolichessbucket",
-      "community": 16,
+      "community": 15,
       "norm_label": "normalizeratingtolichessbucket()"
     },
     {
@@ -2247,7 +2247,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_loadapitoken",
-      "community": 16,
+      "community": 15,
       "norm_label": "loadapitoken()"
     },
     {
@@ -2269,7 +2269,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_getapitoken",
-      "community": 16,
+      "community": 15,
       "norm_label": "getapitoken()"
     },
     {
@@ -2280,7 +2280,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_explorerfetchopts",
-      "community": 16,
+      "community": 15,
       "norm_label": "explorerfetchopts()"
     },
     {
@@ -2291,7 +2291,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_fetchopening",
-      "community": 16,
+      "community": 15,
       "norm_label": "fetchopening()"
     },
     {
@@ -2302,7 +2302,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_fetchexplorermoves",
-      "community": 16,
+      "community": 15,
       "norm_label": "fetchexplorermoves()"
     },
     {
@@ -2324,7 +2324,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_doupdateexplorer",
-      "community": 16,
+      "community": 15,
       "norm_label": "doupdateexplorer()"
     },
     {
@@ -2335,7 +2335,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_renderexplorer",
-      "community": 16,
+      "community": 15,
       "norm_label": "renderexplorer()"
     },
     {
@@ -2588,7 +2588,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_renderhistory",
-      "community": 13,
+      "community": 12,
       "norm_label": "renderhistory()"
     },
     {
@@ -2599,7 +2599,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_showbranchpopover",
-      "community": 13,
+      "community": 12,
       "norm_label": "showbranchpopover()"
     },
     {
@@ -2808,7 +2808,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_updatenavdisplay",
-      "community": 13,
+      "community": 12,
       "norm_label": "updatenavdisplay()"
     },
     {
@@ -2863,7 +2863,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_deletebranch",
-      "community": 13,
+      "community": 12,
       "norm_label": "deletebranch()"
     },
     {
@@ -2874,7 +2874,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_promotebranch",
-      "community": 13,
+      "community": 12,
       "norm_label": "promotebranch()"
     },
     {
@@ -2885,7 +2885,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_deletebranchesat",
-      "community": 13,
+      "community": 12,
       "norm_label": "deletebranchesat()"
     },
     {
@@ -2896,7 +2896,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_undodeletebranch",
-      "community": 13,
+      "community": 12,
       "norm_label": "undodeletebranch()"
     },
     {
@@ -2907,7 +2907,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_updateundobtn",
-      "community": 13,
+      "community": 12,
       "norm_label": "updateundobtn()"
     },
     {
@@ -2918,7 +2918,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "app_gotobranch",
-      "community": 13,
+      "community": 12,
       "norm_label": "gotobranch()"
     },
     {
@@ -8624,7 +8624,7 @@
       "relation": "indirect_call",
       "confidence": "INFERRED",
       "source_file": "app.js",
-      "source_location": "L3974",
+      "source_location": "L3979",
       "weight": 1.0,
       "_origin": "ast",
       "context": "argument",
