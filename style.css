@@ -871,6 +871,9 @@ body{display:flex;flex-direction:column;align-items:center;padding:12px 16px;gap
 .btn-why:hover{opacity:.85}
 .btn-stop-replay{display:inline-block;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;font-size:11px;cursor:pointer;transition:background .15s,color .15s}
 .btn-stop-replay:hover{background:var(--surface3);color:var(--text)}
+.btn-play-maia{display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--emerald);color:var(--emerald-hi);border-radius:var(--radius);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.btn-play-maia:hover{background:var(--emerald);color:#fff}
+.btn-play-maia.active-coach{background:var(--danger-hi);border-color:var(--danger-hi);color:#fff}
 .refutation-box{margin-top:6px;font-size:13px;color:var(--text);line-height:1.7}
 .refutation-box:not(:empty){padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px}
 .refutation-box .opp{color:var(--text-dim)}

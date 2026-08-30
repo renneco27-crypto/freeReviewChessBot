@@ -1090,7 +1090,10 @@ function renderHistory() {
       });
       chip.appendChild(popBtn);
 
+      list.appendChild(brWrap);
+    }
   });
+
   // Smoothly ensure active move is visible without snapping back to bottom
   var activeChip = list.querySelector('.move-chip.active');
   if (activeChip) {
