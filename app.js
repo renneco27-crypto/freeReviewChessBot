@@ -3467,10 +3467,12 @@ document.getElementById('clearBtn').addEventListener('click', function() {
 });
 
 document.getElementById('prevMoveBtn').addEventListener('click', function() {
+  cancelKeyAnimation();
   if (navIdx > -1) { goToMove(navIdx - 1); }
 });
 
 document.getElementById('nextMoveBtn').addEventListener('click', function() {
+  cancelKeyAnimation();
   if (navIdx < moveHistory.length - 1) { goToMove(navIdx + 1); }
 });
 document.getElementById('nextLandmarkBtn').addEventListener('click', function() {
@@ -3845,6 +3847,40 @@ document.getElementById('importTabPgn').addEventListener('click', function() { s
 document.getElementById('importTabFen').addEventListener('click', function() { switchImportTab('paneFen', 'importTabFen'); });
 
 // ── Key Moments / Interesting Move Navigation ──
+var keyAnimTimer = null;
+
+function cancelKeyAnimation() {
+  if (keyAnimTimer) {
+    clearTimeout(keyAnimTimer);
+    keyAnimTimer = null;
+  }
+}
+
+function animateSequenceTo(targetIdx) {
+  if (!moveHistory || moveHistory.length === 0) return;
+  cancelKeyAnimation();
+  if (targetIdx === navIdx) return;
+
+  var step = (targetIdx > navIdx) ? 1 : -1;
+  var current = navIdx;
+
+  function stepNext() {
+    if (current === targetIdx) {
+      keyAnimTimer = null;
+      return;
+    }
+    current += step;
+    goToMove(current);
+    if (current !== targetIdx) {
+      keyAnimTimer = setTimeout(stepNext, 250);
+    } else {
+      keyAnimTimer = null;
+    }
+  }
+
+  stepNext();
+}
+
 function isInterestingMove(idx) {
   if (idx < 0 || idx >= moveHistory.length) return false;
   var m = moveHistory[idx];
@@ -3883,13 +3919,13 @@ function findNextInterestingMove(currentIdx) {
 document.getElementById('firstMoveBtn').addEventListener('click', function() {
   if (!moveHistory || moveHistory.length === 0) return;
   var target = findPrevInterestingMove(navIdx);
-  goToMove(target);
+  animateSequenceTo(target);
 });
 
 document.getElementById('lastMoveBtn').addEventListener('click', function() {
   if (!moveHistory || moveHistory.length === 0) return;
   var target = findNextInterestingMove(navIdx);
-  goToMove(target);
+  animateSequenceTo(target);
 });
 
 // ── Sample Games ──

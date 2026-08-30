@@ -47,33 +47,46 @@
     ],
     "1": [
       "app",
+      "app_animatesequenceto",
       "app_buildgameitem",
+      "app_buildmaiainputtensor",
       "app_buildmaiamovevocab",
       "app_buildrefutationnarration",
+      "app_cancelkeyanimation",
       "app_cancelreview",
       "app_classifyandpushmove",
       "app_classifymove",
       "app_createanalysispool",
       "app_detectbrilliantsacrifice",
       "app_dosync",
+      "app_elototemp",
       "app_endreview",
       "app_findnextinterestingmove",
       "app_findprevinterestingmove",
+      "app_genbranchid",
       "app_getchesscomcachekey",
+      "app_getmaiamove",
+      "app_getmaiatopmoves",
       "app_getthresh",
+      "app_hidesfpreview",
       "app_initengine",
       "app_initvoice",
       "app_isinterestingmove",
       "app_issquareattacked",
       "app_loadcachedgames",
       "app_loadratingpref",
+      "app_mirrorfen",
+      "app_mirrorsq",
+      "app_mirroruci",
       "app_readsan",
       "app_rendersyncgames",
+      "app_samplefromlogits",
       "app_saveapitoken",
       "app_savecachedgames",
       "app_saveratingpref",
       "app_showrefutation",
       "app_tocp",
+      "app_tokenizeboard",
       "app_updatemovehighlight"
     ],
     "2": [
@@ -108,25 +121,29 @@
       "chessground_tryautocastle"
     ],
     "3": [
-      "app_canceltts",
-      "app_checkdrawconditions",
-      "app_domaiaresponse",
-      "app_evalposition",
-      "app_finishmaiagame",
-      "app_getlegaldests",
-      "app_hidesfpreview",
-      "app_initboard",
-      "app_isinsufficientmaterial",
-      "app_ispromotionmove",
-      "app_onmaiausermove",
-      "app_onmove",
-      "app_recordposition",
-      "app_showpromotionpicker",
-      "app_stopmaiamode",
-      "app_stoprefutationreplay",
-      "app_tocolor",
-      "app_tryparseucimove",
-      "app_updateboard"
+      "app_advancetolandmark",
+      "app_clearmistakeui",
+      "app_coachprogress",
+      "app_coachreset",
+      "app_drawgraph",
+      "app_finishreview",
+      "app_gotomove",
+      "app_handlebranchmove",
+      "app_handlereviewmove",
+      "app_initmaiasession",
+      "app_loadortandinit",
+      "app_onmovewithpromotion",
+      "app_parselines",
+      "app_rungamereview",
+      "app_setenginestatus",
+      "app_showtakeaway",
+      "app_startcoach",
+      "app_startlandmarkplayback",
+      "app_startmaiagame",
+      "app_suggestbestmove",
+      "app_updateboard",
+      "app_updateevaldisplay",
+      "app_updateexplorer"
     ],
     "4": [
       "chessground_basemove",
@@ -171,23 +188,23 @@
       "ref_wasm"
     ],
     "6": [
-      "app_deletebranch",
-      "app_deletebranchesat",
-      "app_drawgraph",
-      "app_genbranchid",
-      "app_gotobranch",
-      "app_gotomove",
-      "app_handlereviewmove",
-      "app_promotebranch",
-      "app_renderhistory",
-      "app_showbranchpopover",
-      "app_startcoach",
-      "app_startmaiagame",
-      "app_undodeletebranch",
-      "app_updateevaldisplay",
-      "app_updateexplorer",
-      "app_updatenavdisplay",
-      "app_updateundobtn"
+      "app_canceltts",
+      "app_checkdrawconditions",
+      "app_domaiaresponse",
+      "app_evalposition",
+      "app_finishmaiagame",
+      "app_getlegaldests",
+      "app_initboard",
+      "app_isinsufficientmaterial",
+      "app_ispromotionmove",
+      "app_onmaiausermove",
+      "app_onmove",
+      "app_recordposition",
+      "app_showpromotionpicker",
+      "app_stopmaiamode",
+      "app_stoprefutationreplay",
+      "app_tocolor",
+      "app_tryparseucimove"
     ],
     "7": [
       "chessground_circlewidth",
@@ -208,23 +225,6 @@
       "chessground_syncdefs"
     ],
     "8": [
-      "app_advancetolandmark",
-      "app_clearmistakeui",
-      "app_coachprogress",
-      "app_coachreset",
-      "app_finishreview",
-      "app_handlebranchmove",
-      "app_initmaiasession",
-      "app_loadortandinit",
-      "app_onmovewithpromotion",
-      "app_parselines",
-      "app_rungamereview",
-      "app_setenginestatus",
-      "app_showtakeaway",
-      "app_startlandmarkplayback",
-      "app_suggestbestmove"
-    ],
-    "9": [
       "app_analyzepositionalfactors",
       "app_generatereviewcommentary",
       "app_staticfallback",
@@ -240,7 +240,7 @@
       "stockfish_o",
       "stockfish_p"
     ],
-    "10": [
+    "9": [
       "app_jumptolandmark",
       "app_pickmsg",
       "app_showlandmark",
@@ -254,7 +254,7 @@
       "app_updatecoach",
       "app_updatelandmarkcounter"
     ],
-    "11": [
+    "10": [
       "chessground_computesquarecenter",
       "chessground_dragnewpiece",
       "chessground_eventbrush",
@@ -268,7 +268,7 @@
       "chessground_start_1",
       "chessground_start_2"
     ],
-    "12": [
+    "11": [
       "chessground_addshape",
       "chessground_binddocument",
       "chessground_cancel_1",
@@ -280,7 +280,7 @@
       "chessground_unbindable",
       "chessground_updatebounds"
     ],
-    "13": [
+    "12": [
       "chessground_applyanimation",
       "chessground_chessground",
       "chessground_configure",
@@ -292,18 +292,18 @@
       "chessground_start",
       "chessground_write"
     ],
-    "14": [
-      "app_buildmaiainputtensor",
-      "app_elototemp",
-      "app_getmaiamove",
-      "app_getmaiatopmoves",
-      "app_mirrorfen",
-      "app_mirrorsq",
-      "app_mirroruci",
-      "app_samplefromlogits",
-      "app_tokenizeboard"
+    "13": [
+      "app_deletebranch",
+      "app_deletebranchesat",
+      "app_gotobranch",
+      "app_promotebranch",
+      "app_renderhistory",
+      "app_showbranchpopover",
+      "app_undodeletebranch",
+      "app_updatenavdisplay",
+      "app_updateundobtn"
     ],
-    "15": [
+    "14": [
       "chess_js",
       "onnxruntime_web",
       "testv1_package",
@@ -314,7 +314,7 @@
       "testv1_package_devdependencies_vite_plugin_static_copy",
       "vite_plugin_static_copy"
     ],
-    "16": [
+    "15": [
       "chessground_cancel",
       "chessground_ismovable",
       "chessground_ispremovable",
@@ -325,7 +325,7 @@
       "chessground_setdropmode",
       "chessground_setselected"
     ],
-    "17": [
+    "16": [
       "app_doupdateexplorer",
       "app_explorerfetchopts",
       "app_fetchexplorermoves",
@@ -335,7 +335,7 @@
       "app_normalizeratingtolichessbucket",
       "app_renderexplorer"
     ],
-    "18": [
+    "17": [
       "server_createserver",
       "server_fs",
       "server_http",
@@ -344,7 +344,7 @@
       "server_path",
       "server_port"
     ],
-    "19": [
+    "18": [
       "server_handler",
       "server_handler_do_get",
       "server_handler_do_head",
@@ -353,7 +353,7 @@
       "server_handler_is_path_forbidden",
       "server_py_server"
     ],
-    "20": [
+    "19": [
       "export_maia3",
       "export_maia3_args",
       "export_maia3_rationale_1"
@@ -361,26 +361,25 @@
   },
   "cohesion": {
     "0": 0.12403100775193798,
-    "1": 0.10098522167487685,
+    "1": 0.0743321718931475,
     "2": 0.09852216748768473,
-    "3": 0.15204678362573099,
+    "3": 0.22134387351778656,
     "4": 0.2573099415204678,
     "5": 0.10526315789473684,
-    "6": 0.21323529411764705,
+    "6": 0.15441176470588236,
     "7": 0.19166666666666668,
-    "8": 0.2761904761904762,
-    "9": 0.1978021978021978,
-    "10": 0.21212121212121213,
-    "11": 0.22727272727272727,
-    "12": 0.2222222222222222,
-    "13": 0.24444444444444444,
-    "14": 0.25,
-    "15": 0.2222222222222222,
-    "16": 0.25,
-    "17": 0.32142857142857145,
-    "18": 0.2857142857142857,
-    "19": 0.42857142857142855,
-    "20": 0.6666666666666666
+    "8": 0.1978021978021978,
+    "9": 0.21212121212121213,
+    "10": 0.22727272727272727,
+    "11": 0.2222222222222222,
+    "12": 0.24444444444444444,
+    "13": 0.3611111111111111,
+    "14": 0.2222222222222222,
+    "15": 0.25,
+    "16": 0.32142857142857145,
+    "17": 0.2857142857142857,
+    "18": 0.42857142857142855,
+    "19": 0.6666666666666666
   },
   "gods": [
     {
