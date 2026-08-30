@@ -31,7 +31,18 @@
   </div>
 </header>
 
-<!-- Settings Modal / Popover -->
+<!-- Hidden compatibility elements for existing event listeners -->
+<button id="coachPlayBtn" style="display:none"></button>
+<div id="landmarkNavRow" style="display:none">
+  <button id="prevLandmarkBtn" style="display:none"></button>
+  <button id="nextLandmarkBtn" style="display:none"></button>
+</div>
+<div id="maiaDelayRow" style="display:none">
+  <input type="range" id="maiaDelaySlider" style="display:none" value="1800">
+  <span id="maiaDelayVal" style="display:none">1800ms</span>
+</div>
+
+<!-- Settings Modal -->
 <div class="settings-modal" id="settingsModal" style="display:none">
   <div class="settings-content">
     <div class="settings-header">
@@ -151,7 +162,7 @@
       <span id="engineLabel">Loading Stockfish engine…</span>
     </div>
 
-    <!-- Animated Coach Bot Widget -->
+    <!-- Animated Coach Bot Widget with Eyes Blinking -->
     <div class="coach-widget">
       <div class="coach-avatar-wrap">
         <div class="coach-bot" id="coachBot" data-mood="good">
@@ -215,6 +226,9 @@
     <div class="history-panel">
       <div class="history-header">
         <span class="panel-title">Move History</span>
+        <span class="history-actions">
+          <button class="btn-undo" id="undoDeleteBtn" style="display:none" title="Undo branch deletion">&#10003;</button>
+        </span>
       </div>
       <div class="move-list" id="moveList"></div>
     </div>

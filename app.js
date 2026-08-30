@@ -1595,12 +1595,13 @@ function updateBoard() {
 }
 
 function updateNavDisplay() {
-  var navBar = document.getElementById('navBar');
+  var navBar = document.getElementById('navBar') || document.getElementById('boardNavBar');
   var navInfo = document.getElementById('navMoveInfo');
-  if (moveHistory.length === 0) { navBar.style.display = 'none'; return; }
-  navBar.style.display = 'flex';
-  document.getElementById('prevMoveBtn').disabled = (navIdx <= -1);
-  document.getElementById('nextMoveBtn').disabled = (navIdx >= moveHistory.length - 1);
+  var prevBtn = document.getElementById('prevMoveBtn');
+  var nextBtn = document.getElementById('nextMoveBtn');
+  if (prevBtn) prevBtn.disabled = (navIdx <= -1);
+  if (nextBtn) nextBtn.disabled = (navIdx >= moveHistory.length - 1);
+  if (!navInfo) return;
   if (navIdx < 0) { navInfo.innerHTML = 'Start'; return; }
   var m = moveHistory[navIdx];
   if (!m) { navInfo.textContent = ''; return; }
