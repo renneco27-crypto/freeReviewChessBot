@@ -1423,6 +1423,26 @@ function getThresh(c, prevCp) {
   return Infinity;
 }
 
+function isSquareAttacked(board, sq, attackerColor) {
+  if (!board) return false;
+  if (typeof board.is_attacked === 'function') return board.is_attacked(sq, attackerColor);
+  if (typeof board.isAttacked === 'function') return board.isAttacked(sq, attackerColor);
+  try {
+    var clone = new Chess(board.fen());
+    var currentTurn = clone.turn();
+    if (currentTurn !== attackerColor) {
+      var tokens = clone.fen().split(' ');
+      tokens[1] = attackerColor;
+      tokens[3] = '-';
+      clone.load(tokens.join(' '));
+    }
+    var moves = clone.moves({ verbose: true });
+    return moves.some(function(m) { return m.to === sq; });
+  } catch (e) {
+    return false;
+  }
+}
+
 function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore) {
   if (!topBefore || !afterLine) return 'good';
   var afterNeg = {
@@ -1455,7 +1475,7 @@ function classifyMove(topBefore, secondBefore, afterLine, playedUci, boardBefore
       var attackerVal = PIECE_VAL[movingPiece.type] || 0;
       var captureVal  = PIECE_VAL[capturedPiece.type] || 0;
       var opponentColor = movingPiece.color === 'w' ? 'b' : 'w';
-      var squareDefended = boardBefore.isSquareAttacked(to, opponentColor);
+      var squareDefended = isSquareAttacked(boardBefore, to, opponentColor);
       var netLoss = squareDefended ? (attackerVal - captureVal) : 0;
       if (netLoss >= 4) return 'blunder';
     }
@@ -1478,14 +1498,20 @@ function detectBrilliantSacrifice(playedUci, evBefore, evAfter, boardBefore) {
 
   var from = playedUci.slice(0, 2), to = playedUci.slice(2, 4);
   var piece = boardBefore.get(from);
-  if (!piece || piece.type === 'p' || piece.type === 'k') return false; // Pawns and Kings (castling) cannot be brilliant sacrifices
+  if (!piece || piece.type === 'p' || piece.type === 'k') return false; // Pawns and Kings (castling) excluded
   if (evBefore >= WINNING_THRESHOLD || evBefore <= -WINNING_THRESHOLD) return false;
   var gain = evAfter - evBefore;
   if (isNaN(gain) || gain < BRILLIANT_GAIN_CP) return false;
-  var opponentColor = piece.color === 'w' ? 'b' : 'w';
-  if (!boardBefore.isSquareAttacked(to, opponentColor)) return false;
-  if (boardBefore.isSquareAttacked(to, piece.color)) return false;
-  return true;
+
+  try {
+    var clone = new Chess(boardBefore.fen());
+    var m = clone.move({ from: from, to: to, promotion: playedUci[4] || 'q' });
+    if (!m) return false;
+    var oppMoves = clone.moves({ verbose: true });
+    return oppMoves.some(function(oppM) { return oppM.to === to; });
+  } catch (e) {
+    return false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════
