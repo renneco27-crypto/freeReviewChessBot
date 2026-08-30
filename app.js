@@ -1090,10 +1090,14 @@ function renderHistory() {
       });
       chip.appendChild(popBtn);
 
-      list.appendChild(brWrap);
-    }
   });
-  list.scrollTop = list.scrollHeight;
+  // Smoothly ensure active move is visible without snapping back to bottom
+  var activeChip = list.querySelector('.move-chip.active');
+  if (activeChip) {
+    activeChip.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } else if (navIdx === moveHistory.length - 1) {
+    list.scrollTop = list.scrollHeight;
+  }
   var vals = { blunder: 0, mistake: .2, inaccuracy: .4, good: .65, excellent: .9, best: 1, great: 1, brilliant: 1, forced: 1, book: 1 };
   var wS = 0, wT = 0, bS = 0, bT = 0;
   moveHistory.forEach(function(m, i) {
@@ -3213,6 +3217,8 @@ function stopMaiaMode() {
   gameHistory = []; // Clear game history
   playerColor = 'white';
   document.getElementById('coachPlayBtn').classList.remove('active-coach');
+  var playPosBtn = document.getElementById('playFromPosBtn');
+  if (playPosBtn) playPosBtn.textContent = '⚔️ Play Maia';
   document.getElementById('explorerContent').parentElement.classList.remove('explorer-hidden');
   document.getElementById('maiaDelayRow').style.display = 'none';
   document.getElementById('explorerToggleBtn').style.display = 'none';
@@ -3579,6 +3585,23 @@ document.getElementById('coachPlayBtn').addEventListener('click', function() {
 
 // ── Suggest Best Move ──
 document.getElementById('suggestBtn').addEventListener('click', suggestBestMove);
+
+// ── Play Maia from Current Position Button ──
+var playPosBtn = document.getElementById('playFromPosBtn');
+if (playPosBtn) {
+  playPosBtn.addEventListener('click', function() {
+    if (maiaMode) {
+      stopMaiaMode();
+      this.textContent = '⚔️ Play Maia';
+      coachReset('Play vs Coach ended.');
+      return;
+    }
+    this.textContent = '⏹ Stop Playing';
+    document.getElementById('tabMaiaMode')?.classList.add('active');
+    document.getElementById('tabReviewMode')?.classList.remove('active');
+    document.getElementById('coachPlayBtn')?.click();
+  });
+}
 
 // ── TTS Toggle ──
 document.getElementById('ttsToggle').addEventListener('click', function() {
