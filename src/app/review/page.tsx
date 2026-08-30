@@ -9,6 +9,7 @@ import { MoveList } from '../../components/ChessReview/MoveList';
 import { CoachReviewCard } from '../../components/ChessReview/CoachReviewCard';
 import { AdvancedStatsModal } from '../../components/ChessReview/AdvancedStatsModal';
 import { GameListModal } from '../../components/ChessReview/GameListModal';
+import { runStockfishGameReview } from '../../lib/stockfishReview';
 import { analyzePGN } from '../../lib/engineAnalyzer';
 import { generateGameSummary } from '../../lib/coachReviewer';
 import { sounds } from '../../lib/soundService';
@@ -43,6 +44,8 @@ export default function GameReviewPage() {
   const [showStats, setShowStats] = useState(false);
   const [showGameList, setShowGameList] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState('');
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [pgnInput, setPgnInput] = useState('');
   const [username, setUsername] = useState('');
   const [games, setGames] = useState<ChessComGameSummary[]>([]);
@@ -57,18 +60,34 @@ export default function GameReviewPage() {
     : (report?.moves.find(m => m.ply === currentPly)?.fenAfter ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
   const currentEval = currentMove?.evalAfter ?? 0;
 
-  const doAnalyze = useCallback((pgn: string) => {
+  const doAnalyze = useCallback(async (pgn: string) => {
     setIsAnalyzing(true);
     setError('');
     setCurrentPly(0);
+    setAnalysisProgress(0);
+    setAnalysisStatus('Starting Stockfish engine analysis...');
+
     try {
-      const result = analyzePGN(pgn);
+      // First try real Stockfish worker
+      let result: GameReviewReport;
+      try {
+        result = await runStockfishGameReview(pgn, (current, total, msg) => {
+          setAnalysisStatus(msg);
+          setAnalysisProgress(Math.round((current / total) * 100));
+        });
+      } catch (workerErr) {
+        console.warn('Stockfish worker failed, using fallback engine:', workerErr);
+        setAnalysisStatus('Evaluating moves...');
+        result = analyzePGN(pgn);
+      }
+
       setReport(result);
       setGameSummary(generateGameSummary(result));
     } catch (e) {
-      setError(`Analysis failed: ${e instanceof Error ? e.message : 'Invalid PGN'}`);
+      setError(`Analysis failed: ${e instanceof Error ? e.message : 'Invalid PGN format'}`);
     } finally {
       setIsAnalyzing(false);
+      setAnalysisStatus('');
     }
   }, []);
 
@@ -156,9 +175,9 @@ export default function GameReviewPage() {
             </Link>
             <div className="h-4 w-px bg-gray-700 mx-1" />
             <span className="text-2xl">🎓</span>
-            <h1 className="text-lg font-bold text-white tracking-tight">Chess Game Review</h1>
+            <h1 className="text-lg font-bold text-white tracking-tight">Chess Coach Game Review</h1>
             <span className="text-[11px] text-green-400 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-full font-mono">
-              Offline Engine Ready
+              Stockfish NNUE Engine
             </span>
           </div>
 
@@ -189,7 +208,7 @@ export default function GameReviewPage() {
             <div className="text-center space-y-2">
               <h2 className="text-3xl font-extrabold text-white">Full Game Review & AI Coach</h2>
               <p className="text-gray-400 text-sm">
-                Analyze move quality, calculate win-probability accuracy (CAPS), identify critical blunders, and explore coach suggestions.
+                Analyze move quality with Stockfish evaluations, accurate win-probability classifications, and coach explanations.
               </p>
             </div>
 
@@ -224,10 +243,25 @@ export default function GameReviewPage() {
                 <button
                   onClick={handleImportPGN}
                   disabled={isAnalyzing}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm shadow-md"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm shadow-md flex items-center justify-center gap-2"
                 >
-                  {isAnalyzing ? '⏳ Running Game Review...' : '🔍 Start Game Review'}
+                  {isAnalyzing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>{analysisStatus || 'Analyzing with Stockfish...'}</span>
+                    </>
+                  ) : (
+                    '🔍 Start Game Review'
+                  )}
                 </button>
+                {isAnalyzing && analysisProgress > 0 && (
+                  <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-300"
+                      style={{ width: `${analysisProgress}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -266,13 +300,15 @@ export default function GameReviewPage() {
               <span className="text-xs text-gray-500">Quick Samples:</span>
               <button
                 onClick={() => doAnalyze(SAMPLE_KASPAROV_PGN)}
-                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors"
+                disabled={isAnalyzing}
+                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors disabled:opacity-50"
               >
                 Kasparov's Immortal (1999)
               </button>
               <button
                 onClick={() => doAnalyze(SAMPLE_OPERA_PGN)}
-                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors"
+                disabled={isAnalyzing}
+                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors disabled:opacity-50"
               >
                 Morphy Opera Game (1858)
               </button>
