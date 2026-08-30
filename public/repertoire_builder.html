@@ -1171,20 +1171,44 @@ let activeSubsetBranch = null;
 function getTopLevelBranchGroups() {
   const groups = {};
   decompiledLines.forEach((lineNodes, idx) => {
-    const fullMovesStr = formatLineMoves(lineNodes);
+    const sans = lineNodes.map(n => n.san);
     let categoryName = "Scotch Game Main";
-    
-    if (fullMovesStr.includes('Bc5') || fullMovesStr.includes('4... Bc5')) categoryName = 'Scotch: Classical (4...Bc5)';
-    else if (fullMovesStr.includes('Bb4+') || fullMovesStr.includes('4... Bb4+')) categoryName = 'Scotch: Mieses / Bb4+';
-    else if (fullMovesStr.includes('4... Nxd4 5. Qxd4') || fullMovesStr.includes('Nxd4 5. Qxd4')) categoryName = 'Scotch: 4...Nxd4 5. Qxd4';
-    else if (fullMovesStr.includes('3... d6')) categoryName = 'Scotch: 3...d6 Philidor';
-    else if (fullMovesStr.includes('3... Nf6') || fullMovesStr.includes('4... Nf6')) categoryName = 'Scotch: Two Knights Counter';
-    else if (fullMovesStr.includes('3... f6')) categoryName = 'Scotch: 3...f6';
-    else if (fullMovesStr.includes('3... d5')) categoryName = 'Scotch: 3...d5 Gambit';
-    else if (fullMovesStr.includes('3... Bb4+')) categoryName = 'Scotch: 3...Bb4+';
-    else if (fullMovesStr.includes('3... Nxd4')) categoryName = 'Scotch: 3...Nxd4';
-    else categoryName = `Branch Group ${idx + 1}`;
-    
+
+    // Move 3 black response (ply 6):
+    if (sans.length >= 6) {
+      const m3_black = sans[5];
+      if (m3_black === 'exd4') {
+        if (sans.length >= 8) {
+          const m4_black = sans[7];
+          if (m4_black === 'Nxd4') {
+            categoryName = 'Scotch: 4...Nxd4 5. Qxd4';
+          } else if (m4_black === 'Bc5') {
+            categoryName = 'Scotch: Classical (4...Bc5)';
+          } else if (m4_black === 'Nf6') {
+            categoryName = 'Scotch: Mieses (4...Nf6)';
+          } else {
+            categoryName = `Scotch: 4...${m4_black}`;
+          }
+        } else {
+          categoryName = 'Scotch: 3...exd4 4. Nxd4';
+        }
+      } else if (m3_black === 'd6') {
+        categoryName = 'Scotch: 3...d6 (Philidor Defense)';
+      } else if (m3_black === 'Nf6') {
+        categoryName = 'Scotch: 3...Nf6 (Two Knights Counter)';
+      } else if (m3_black === 'f6') {
+        categoryName = 'Scotch: 3...f6';
+      } else if (m3_black === 'd5') {
+        categoryName = 'Scotch: 3...d5 (Scotch Gambit)';
+      } else if (m3_black === 'Bb4+') {
+        categoryName = 'Scotch: 3...Bb4+';
+      } else if (m3_black === 'Nxd4') {
+        categoryName = 'Scotch: 3...Nxd4';
+      } else {
+        categoryName = `Scotch: 3...${m3_black}`;
+      }
+    }
+
     if (!groups[categoryName]) {
       groups[categoryName] = {
         name: categoryName,
@@ -1251,9 +1275,11 @@ function renderLinesList() {
         </div>
         <div class="line-moves">${moveStrings}</div>
         ${group.indices.length > 1 ? `
-          <button class="sub-branch-btn" onclick="openSubset(event, '${group.name.replace(/'/g, "\\'")}')">
-            📂 Click to explore ${group.indices.length} subset lines →
-          </button>
+          <div style="margin-top:6px; display:flex; align-items:center;">
+            <button class="sub-branch-btn" onclick="openSubset(event, '${group.name.replace(/'/g, "\\'")}')">
+              📂 Click to explore ${group.indices.length} subset lines →
+            </button>
+          </div>
         ` : ''}
       `;
 
