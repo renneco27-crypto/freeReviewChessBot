@@ -133,14 +133,6 @@ function saveApiToken(t) {
 function getApiToken() {
   return loadApiToken() || document.getElementById('apiToken').value.trim();
 }
-// Load token from .env at startup
-fetch('.env').then(function(r) { return r.text(); }).then(function(text) {
-  var m = text.match(/^LICHESS_API_TOKEN=(.+)$/m);
-  if (m) {
-    document.getElementById('apiToken').value = m[1];
-    saveApiToken(m[1]);
-  }
-}).catch(function() {});
 function explorerFetchOpts() {
   var token = getApiToken();
   if (!token) return {};
@@ -3157,46 +3149,56 @@ function doMaiaResponse(depth, rating) {
       return;
     }
     var maiaUci = mr.from + mr.to + (mr.promotion || '');
-    var fenAfter = game.fen();
-    maiaHistory.push(tokenizeBoard(game));
-    if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
-    recordPosition(fenAfter);
-    
-    cg.set({
-      fen: game.fen(),
-      turnColor: toColor(game.turn()),
-      movable: { color: playerColor, dests: getLegalDests() },
-      lastMove: [mr.from, mr.to],
-      check: game.in_check() ? game.turn() : false
-    });
 
-    var drawCheck = checkDrawConditions(game);
-    if (drawCheck.isDraw) {
-      finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
-      return;
-    }
-    
-    if (game.game_over()) {
-      finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
-      return;
-    }
-    navIdx = moveHistory.length;
-    updateNavDisplay();
+    // Human-like thinking time with natural variance
+    var baseDelay = parseInt(document.getElementById('maiaDelaySlider')?.value || '1500', 10);
+    var jitter = Math.floor(Math.random() * 400) - 200;
+    var thinkDelay = Math.max(600, baseDelay + jitter);
 
-    evalPosition(fenAfter, depth, function(afterLine) {
-      var isBlackTurn = game.turn() === 'b';
-      var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
-      updateEvalDisplay(r.evAfter * 100);
-      renderHistory();
-      drawGraph();
+    setTimeout(function() {
+      if (!maiaMode || game.game_over()) return;
 
-      var msg = 'Maia played <span class="accent">' + mr.san + '</span>.';
-      updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg, isUserMove: false });
-      prevEval = afterLine;
-      isAnalysing = false;
-      setEngineStatus('ready');
-      cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
-    });
+      var fenAfter = game.fen();
+      maiaHistory.push(tokenizeBoard(game));
+      if (maiaHistory.length > MAIA_HISTORY_LEN) maiaHistory.shift();
+      recordPosition(fenAfter);
+      
+      cg.set({
+        fen: game.fen(),
+        turnColor: toColor(game.turn()),
+        movable: { color: playerColor, dests: getLegalDests() },
+        lastMove: [mr.from, mr.to],
+        check: game.in_check() ? game.turn() : false
+      });
+
+      var drawCheck = checkDrawConditions(game);
+      if (drawCheck.isDraw) {
+        finishMaiaGame('Draw by ' + drawCheck.reason + '!', mr.san, maiaUci, fenAfter);
+        return;
+      }
+      
+      if (game.game_over()) {
+        finishMaiaGame('Maia wins! Checkmate.', mr.san, maiaUci, fenAfter);
+        return;
+      }
+      navIdx = moveHistory.length;
+      updateNavDisplay();
+
+      evalPosition(fenAfter, depth, function(afterLine) {
+        var isBlackTurn = game.turn() === 'b';
+        var r = classifyAndPushMove(mr.from, mr.to, mr.san, maiaUci, fenBefore, fenAfter, prevEval, afterLine, isBlackTurn);
+        updateEvalDisplay(r.evAfter * 100);
+        renderHistory();
+        drawGraph();
+
+        var msg = 'Maia played <span class="accent">' + mr.san + '</span>.';
+        updateCoach({ classification: r.cls, currentEval: r.evAfter, evalSwing: r.swing, moveSan: mr.san, isWhiteToMove: !isBlackTurn, customMsg: msg, isUserMove: false });
+        prevEval = afterLine;
+        isAnalysing = false;
+        setEngineStatus('ready');
+        cg.set({ movable: { color: playerColor, dests: getLegalDests() } });
+      });
+    }, thinkDelay);
   }).catch(function(err) {
     console.error('[Maia Error]', err);
     isAnalysing = false;
@@ -3709,6 +3711,28 @@ function renderSyncGames(games) {
   });
 }
 
+function getChesscomCacheKey(u) {
+  return 'chessCoach.cachedGames.' + (u || '').toLowerCase().trim();
+}
+
+function loadCachedGames(u) {
+  if (!u) return null;
+  try {
+    var raw = localStorage.getItem(getChesscomCacheKey(u));
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function saveCachedGames(u, games) {
+  if (!u || !games) return;
+  try {
+    localStorage.setItem(getChesscomCacheKey(u), JSON.stringify({
+      games: games,
+      savedAt: Date.now()
+    }));
+  } catch(e) {}
+}
+
 function doSync() {
   var username = document.getElementById('chessUserInput').value.trim();
   if (!username) { document.getElementById('syncStatus').textContent = 'Enter a username'; return; }
@@ -3726,7 +3750,8 @@ function doSync() {
       function fetchNext() {
         if (idx >= data.archives.length) {
           _cachedGames = allGames.reverse();
-          document.getElementById('syncStatus').textContent = allGames.length + ' total game' + (allGames.length !== 1 ? 's' : '');
+          saveCachedGames(username, _cachedGames);
+          document.getElementById('syncStatus').textContent = allGames.length + ' total game' + (allGames.length !== 1 ? 's (Cached)' : ' (Cached)');
           renderSyncGames(allGames);
           return;
         }
@@ -3759,6 +3784,21 @@ document.getElementById('settingsCloseBtn').addEventListener('click', function()
 });
 window.addEventListener('click', function(e) {
   if (e.target === settingsModal) settingsModal.style.display = 'none';
+});
+
+// ── Token Eye & Save ──
+var tokenEyeBtn = document.getElementById('tokenToggleEye');
+var tokenIn = document.getElementById('apiToken');
+if (tokenEyeBtn && tokenIn) {
+  tokenEyeBtn.addEventListener('click', function() {
+    tokenIn.type = tokenIn.type === 'password' ? 'text' : 'password';
+    tokenEyeBtn.textContent = tokenIn.type === 'password' ? '👁️' : '🙈';
+  });
+}
+document.getElementById('tokenSaveBtn')?.addEventListener('click', function() {
+  var t = document.getElementById('apiToken').value.trim();
+  saveApiToken(t);
+  coachReset('Personal Lichess token saved in local browser.');
 });
 
 // ── Import Tabs ──
@@ -3842,8 +3882,19 @@ var savedRating = loadRatingPref();
 document.getElementById('ratingSelect').value = savedRating;
 
 // Fallback: populate input from localStorage
-if (!document.getElementById('apiToken').value) {
-  document.getElementById('apiToken').value = loadApiToken();
+// Restore Chess.com cached username and games
+var savedUser = '';
+try { savedUser = localStorage.getItem('chessCoach.chessUser') || ''; } catch(e) {}
+if (savedUser) {
+  var userInput = document.getElementById('chessUserInput');
+  if (userInput) userInput.value = savedUser;
+  var cached = loadCachedGames(savedUser);
+  if (cached && cached.games && cached.games.length > 0) {
+    _cachedGames = cached.games;
+    var syncStat = document.getElementById('syncStatus');
+    if (syncStat) syncStat.textContent = _cachedGames.length + ' games loaded from cache';
+    renderSyncGames(_cachedGames);
+  }
 }
 
 initEngine();

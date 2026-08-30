@@ -51,7 +51,7 @@
     </div>
     <div class="settings-body">
       <div class="setting-item">
-        <label for="ratingSelect">Player Rating Level</label>
+        <label for="ratingSelect">Maia Rating Level</label>
         <select id="ratingSelect">
           <option value="1000">&lt;1200 (Beginner)</option>
           <option value="1200">1200–1399 (Novice)</option>
@@ -64,14 +64,20 @@
         </select>
       </div>
       <div class="setting-item">
+        <label for="maiaDelaySlider">Maia Thinking Time: <span id="maiaDelayVal" class="bold-val">1.5s</span></label>
+        <input type="range" id="maiaDelaySlider" min="600" max="4000" step="100" value="1500"
+               oninput="document.getElementById('maiaDelayVal').textContent=(this.value/1000).toFixed(1)+'s'">
+      </div>
+      <div class="setting-item">
         <label for="depthSlider">Stockfish Analysis Depth: <span id="depthVal" class="bold-val">10</span></label>
         <input type="range" id="depthSlider" min="6" max="18" value="10"
                oninput="document.getElementById('depthVal').textContent=this.value">
       </div>
       <div class="setting-item">
-        <label for="apiToken">Lichess API Token (Optional for Explorer)</label>
+        <label for="apiToken">Lichess API Token (Stored in Local Browser Only)</label>
         <div class="input-with-btn">
-          <input type="text" id="apiToken" placeholder="Personal OAuth token..." spellcheck="false">
+          <input type="password" id="apiToken" placeholder="Paste personal token (cached locally)..." spellcheck="false">
+          <button class="btn small" id="tokenToggleEye" type="button" title="Show/Hide token">👁️</button>
           <button class="btn primary small" id="tokenSaveBtn">Save</button>
         </div>
       </div>
