@@ -1465,11 +1465,33 @@ function getTopLevelBranchGroups() {
       groups[categoryName] = {
         name: categoryName,
         indices: [],
-        representativeNodes: lineNodes
+        representativeNodes: lineNodes,
+        commonPrefixPly: lineNodes.length
       };
     }
     groups[categoryName].indices.push(idx);
   });
+
+  // Compute common prefix ply across lines in each group
+  Object.values(groups).forEach(g => {
+    if (g.indices.length <= 1) {
+      g.commonPrefixPly = Math.min(8, decompiledLines[g.indices[0]].length);
+    } else {
+      const firstLine = decompiledLines[g.indices[0]];
+      let common = firstLine.length;
+      for (let i = 1; i < g.indices.length; i++) {
+        const otherLine = decompiledLines[g.indices[i]];
+        let matchLen = 0;
+        for (let p = 0; p < firstLine.length && p < otherLine.length; p++) {
+          if (firstLine[p].san === otherLine[p].san) matchLen++;
+          else break;
+        }
+        common = Math.min(common, matchLen);
+      }
+      g.commonPrefixPly = common;
+    }
+  });
+
   return Object.values(groups);
 }
 
@@ -1708,14 +1730,47 @@ function saveCurrentNote() {
 // ----------------------------------------------------
 // LINE PLAYTHROUGH & BRANCH SELECTION
 // ----------------------------------------------------
-function selectLine(index) {
+function selectLine(index, targetPly = null) {
+  const previousHistory = [...moveHistory];
+  const oldPly = currentPly;
+
   activeLineIndex = index;
   const cards = document.querySelectorAll('.line-card');
   cards.forEach((c, i) => c.classList.toggle('active', i === index));
 
   const activeNodes = decompiledLines[index] || [];
   buildHistory(activeNodes);
-  goToStart();
+
+  // If explicit target ply was requested
+  if (targetPly !== null && targetPly >= 0 && targetPly < moveHistory.length) {
+    updateToPly(targetPly);
+    return;
+  }
+
+  // Calculate shared branch/fork ply between previous path and new line
+  let sharedPly = 0;
+  for (let i = 1; i < moveHistory.length && i < previousHistory.length; i++) {
+    if (moveHistory[i].san === previousHistory[i].san) {
+      sharedPly = i;
+    } else {
+      break;
+    }
+  }
+
+  if (sharedPly > 0) {
+    // Retain current position if already within shared prefix, or jump to exact branch fork!
+    const jumpPly = (oldPly > 0 && oldPly <= sharedPly) ? oldPly : sharedPly;
+    updateToPly(jumpPly);
+  } else {
+    // If selecting a branch group, jump to its common branch prefix so board shows the relevant line
+    const branchGroups = getTopLevelBranchGroups();
+    const grp = branchGroups.find(g => g.indices.includes(index));
+    if (grp && grp.commonPrefixPly > 0) {
+      updateToPly(grp.commonPrefixPly);
+    } else {
+      updateToPly(0);
+    }
+  }
 }
 
 function buildHistory(nodes) {
