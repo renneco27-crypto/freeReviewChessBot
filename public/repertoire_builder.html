@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>♟️ Repertoire Builder, Move Notes & Practice Mode</title>
+<!-- Include Chess.js for move validation & FEN generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+  :root {
+    --bg-dark: #0f141c;
+    --bg-card: #161d27;
+    --bg-card-hover: #1f2937;
+    --border: #263345;
+    --text-main: #f0f6fc;
+    --text-muted: #8b949e;
+    --accent: #38bdf8;
+    --accent-hover: #0284c7;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --sq-light: #f0d9b5;
+    --sq-dark: #b58863;
+    --sq-selected: rgba(255, 255, 0, 0.45);
+    --sq-last-move: rgba(56, 189, 248, 0.4);
+    --sq-dest-option: rgba(0, 0, 0, 0.22);
+    --sq-error: rgba(239, 68, 68, 0.55);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { background: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  header {
+    background: #111823;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 10;
+  }
+  header h1 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; font-weight: 700; color: #fff; }
+  header .badge { background: #0284c7; color: #fff; font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .shortcuts-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: #1c2636;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kbd {
+    background: #283548;
+    color: #e2e8f0;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.72rem;
+    border: 1px solid #3b4c66;
+  }
+
+  .main-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr 370px;
+    height: calc(100vh - 52px);
+    overflow: hidden;
+  }
+
+  /* Left Panel: Variations / Decompiled Lines */
+  .panel {
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 0.82rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #111823;
+    flex-shrink: 0;
+  }
+  .panel-body { padding: 10px 12px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+
+  textarea {
+    width: 100%;
+    height: 68px;
+    background: #0b0f17;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    padding: 6px 8px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    resize: none;
+    flex-shrink: 0;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .btn-group { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
+  .btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: #1f2937;
+    color: var(--text-main);
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .btn:hover { background: #374151; border-color: #4b5563; }
+  .btn-primary { background: #0284c7; border-color: #38bdf8; color: white; }
+  .btn-primary:hover { background: #0369a1; }
+  .btn-success { background: #16a34a; border-color: #22c55e; color: white; }
+  .btn-success:hover { background: #15803d; }
+  .btn-warning { background: #d97706; border-color: #f59e0b; color: white; }
+  .btn-warning:hover { background: #b45309; }
+
+  /* Decompiled Lines List */
+  .lines-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 2px;
+    min-height: 120px;
+  }
+  .line-card {
+    background: #0f1520;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .line-card:hover { border-color: var(--accent); background: #172131; }
+  .line-card.active { border-color: var(--accent); background: #172a45; box-shadow: 0 0 0 1px var(--accent); }
+  .line-header { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; }
+  .line-title { font-weight: 700; color: var(--accent); font-size: 0.78rem; }
+  .line-moves { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; word-break: break-word; font-family: monospace; }
+
+  /* Center Panel: Fluid Movable Chessboard & Controls */
+  .center-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0b0f17;
+    padding: 8px 12px;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  .board-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 1vh, 10px);
+    width: 100%;
+    max-height: 100%;
+  }
+
+  .chessboard {
+    width: min(calc(100vh - 210px), 510px, 85vw);
+    height: min(calc(100vh - 210px), 510px, 85vw);
+    max-width: 510px;
+    max-height: 510px;
+    aspect-ratio: 1 / 1;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border: 3px solid #1e293b;
+    border-radius: 4px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    user-select: none;
+    position: relative;
+    transition: transform 0.1s ease;
+    flex-shrink: 0;
+  }
+  .chessboard.shake {
+    animation: shake 0.35s ease-in-out;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px); }
+    40%, 80% { transform: translateX(8px); }
+  }
+
+  .square {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+  }
+  .square.light { background: var(--sq-light); }
+  .square.dark { background: var(--sq-dark); }
+  .square.selected { background: var(--sq-selected) !important; }
+  .square.last-move { background: var(--sq-last-move) !important; }
+  .square.error-square { background: var(--sq-error) !important; }
+
+  .dest-dot {
+    width: clamp(12px, 2.8vw, 18px);
+    height: clamp(12px, 2.8vw, 18px);
+    background: var(--sq-dest-option);
+    border-radius: 50%;
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .capture-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 3px solid rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .square-coord {
+    position: absolute;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .coord-rank { top: 2px; left: 2px; }
+  .coord-file { bottom: 2px; right: 2px; }
+  .square.light .square-coord { color: var(--sq-dark); }
+  .square.dark .square-coord { color: var(--sq-light); }
+
+  .piece-img {
+    width: 88%;
+    height: 88%;
+    cursor: grab;
+    z-index: 4;
+    transition: transform 0.05s ease-out;
+  }
+  .piece-img:active { cursor: grabbing; transform: scale(1.1); }
+
+  .board-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .board-controls .btn { width: 38px; height: 32px; font-size: 0.88rem; padding: 0; }
+
+  /* Right Panel: Repertoire Tree & Branch Selector */
+  .right-panel {
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  /* Opening Header & Note Section */
+  .opening-info-box {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #111823;
+    flex-shrink: 0;
+  }
+  .opening-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .eco-badge {
+    background: #1e293b;
+    border: 1px solid #334155;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: #94a3b8;
+  }
+
+  .note-editor-box {
+    margin-top: 6px;
+    background: #0b0f17;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  .note-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .note-input {
+    width: 100%;
+    height: 44px;
+    background: transparent;
+    border: none;
+    color: #f1f5f9;
+    font-size: 0.75rem;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    line-height: 1.35;
+  }
+
+  .branch-section {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    max-height: 38%;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .branch-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .candidate-btn {
+    width: 100%;
+    text-align: left;
+    background: #0f1520;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 5px;
+    color: var(--text-main);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.15s;
+  }
+  .candidate-btn:hover {
+    border-color: var(--accent);
+    background: #17253b;
+    transform: translateX(3px);
+  }
+  .candidate-move { font-weight: 800; font-size: 0.88rem; color: #38bdf8; }
+  .candidate-meta { font-size: 0.68rem; color: var(--text-muted); text-align: right; }
+
+  .notation-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-family: monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    min-height: 80px;
+  }
+  .notation-move {
+    padding: 1px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-block;
+    color: #e2e8f0;
+  }
+  .notation-move:hover { background: #1f2937; color: var(--accent); }
+  .notation-move.active { background: #0284c7; color: white; font-weight: bold; }
+
+  .fen-box {
+    background: #0b0f17;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.68rem;
+    font-family: monospace;
+    word-break: break-all;
+    margin-top: 2px;
+    color: #94a3b8;
+    user-select: all;
+    max-width: min(calc(100vh - 210px), 510px, 85vw);
+    width: 100%;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  /* Practice Mode Banner */
+  .practice-banner {
+    background: #064e3b;
+    border: 1px solid #059669;
+    color: #a7f3d0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: min(calc(100vh - 210px), 510px, 85vw);
+    width: 100%;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>♟️ Repertoire Builder & PGN Decompiler <span class="badge">Live Practice & Move Notes</span></h1>
+  
+  <div class="shortcuts-hint">
+    <span>Shortcuts:</span>
+    <span class="kbd">◀ Left</span> Prev
+    <span class="kbd">Right ▶</span> Next
+    <span class="kbd">▲ Up</span> Start
+    <span class="kbd">▼ Down</span> End
+    <span class="kbd">F</span> Flip
+  </div>
+
+  <div style="display:flex; gap:8px;">
+    <button class="btn btn-success" id="practice-btn" onclick="togglePracticeMode()">🎯 Practice Line</button>
+    <button class="btn btn-warning" onclick="revertToOriginalPgn()">🔄 Revert to Original</button>
+    <button class="btn" onclick="flipBoard()">🔄 Flip Board</button>
+    <button class="btn btn-primary" onclick="exportCurrentLine()">💾 Export Line</button>
+  </div>
+</header>
+
+<div class="main-layout">
+  <!-- Left Panel: PGN Input & Decompiled Variations -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>📥 Repertoire Source PGN</span>
+      <span id="line-count-badge" style="font-size:0.75rem; color:var(--accent);">0 Lines</span>
+    </div>
+    <div class="panel-body">
+      <textarea id="pgn-input" placeholder="Paste repertoire PGN with nested variations (...) and {comments}..."></textarea>
+      <div class="btn-group">
+        <button class="btn btn-primary" style="flex:1;" onclick="decompilePgn()">⚡ Decompile</button>
+        <button class="btn" onclick="loadSampleScotch()">Sample</button>
+        <button class="btn" onclick="document.getElementById('file-upload').click()">📁 Upload</button>
+        <input type="file" id="file-upload" accept=".pgn" style="display:none" onchange="handleFileUpload(event)">
+      </div>
+
+      <div style="font-size:0.78rem; font-weight:700; color:var(--text-muted); margin-top:4px;">
+        DECOMPILED VARIATIONS (<span id="total-lines-count">0</span>)
+      </div>
+      <div class="lines-container" id="lines-list">
+        <div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:20px;">
+          Load or paste a PGN above to decompile into playable branches.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center Panel: Movable Chessboard -->
+  <div class="center-panel">
+    <div class="board-container">
+      <!-- Practice Mode Banner -->
+      <div id="practice-alert" class="practice-banner" style="display:none; width:520px;">
+        <span id="practice-status-text">🎯 Practice Mode Active: Play White's move from memory!</span>
+        <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:#047857;" onclick="togglePracticeMode()">Exit</button>
+      </div>
+
+      <div id="chessboard" class="chessboard"></div>
+      
+      <div class="board-controls">
+        <button class="btn" onclick="goToStart()" title="First Move (Up Arrow)">|&lt;</button>
+        <button class="btn" onclick="stepMove(-1)" title="Previous Move (Left Arrow)">&lt;</button>
+        <button class="btn" onclick="stepMove(1)" title="Next Move (Right Arrow)">&gt;</button>
+        <button class="btn" onclick="goToEnd()" title="Last Move (Down Arrow)">&gt;|</button>
+      </div>
+
+      <div style="text-align:center;">
+        <span id="move-indicator" style="font-weight:700; font-size:0.95rem; color:var(--accent);">Starting Position</span>
+      </div>
+      <div class="fen-box" id="fen-display">rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1</div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Opening Info, Move Notes & Branch Selector -->
+  <div class="right-panel">
+    <!-- Opening & Move Explanations -->
+    <div class="opening-info-box">
+      <div class="opening-title">
+        <span id="opening-name-text">Scotch Game</span>
+        <span class="eco-badge" id="eco-code-text">C45</span>
+      </div>
+      
+      <!-- Move Notes / Explanations Editor -->
+      <div class="note-editor-box">
+        <div class="note-header">
+          <span>📝 Move Explanation & Tactical Notes:</span>
+          <button class="btn" style="padding:2px 6px; font-size:0.68rem; height:20px;" onclick="saveCurrentNote()">💾 Save Note</button>
+        </div>
+        <textarea id="move-note-input" class="note-input" placeholder="Type tactical rationale (e.g. Attacks the e4 pawn, prepares ...Bb4)..." oninput="onNoteTyped()"></textarea>
+      </div>
+    </div>
+
+    <!-- Available Branches -->
+    <div class="branch-section">
+      <div class="branch-title">
+        <span>Branches at Current Position</span>
+        <span id="candidate-count" style="color:var(--accent);">0</span>
+      </div>
+      <div id="candidate-branches">
+        <div style="color:var(--text-muted); font-size:0.8rem;">No branches available.</div>
+      </div>
+    </div>
+
+    <!-- Active Line Moves -->
+    <div class="panel-header">
+      <span>📜 Active Line Notation</span>
+    </div>
+    <div class="notation-view" id="notation-history"></div>
+  </div>
+</div>
+
+<script>
+// High Quality Vector SVGs for Chess Pieces
+const PIECE_SVGS = {
+  'w': {
+    'p': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48cGF0aCBkPSJNMjIuNSA5Yy0yLjIxIDAtNCAxLjc5LTQgNCAwIC44OS4yOSAxLjcxLjc4IDIuMzhDMTcuMzMgMTYuNSAxNiAxOC41OSAxNiAyMWMwIDIuMDMuOTQgMy44NCAyLjQxIDUuMDMtMyAxLjA2LTcuNDEgNS41NS03LjQxIDEzLjQ3aDIzYzAtNy45Mi00LjQxLTEyLjQxLTcuNDEtMTMuNDcgMS40Ny0xLjE5IDIuNDEtMyAyLjQxLTUuMDMgMC0yLjQxLTEuMzMtNC41LTMuMjgtNS42Mi40OS0uNjcuNzgtMS40OS43OC0yLjM4IDAtMi4yMS0xLjc5LTQtNC00eiIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+",
+    'n': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyIDEwYzEwLjUgMSAxNi41IDggMTYgMjlIMTVjMC05IDEwLTYuNSA4LTIxIiBmaWxsPSIjZmZmIi8+PHBhdGggZD0iTTI0IDE4Yy4zOCAyLjkxLTUuNTUgNy4zNy04IDktMyAyLTIuODIgNC4zNC01IDQtMS4wNDItLjk0IDEuNDEtMy4wNCAwLTMtMSAwIC4xOSAxLjIzLTEgMi0xIDAtNC4wMDMgMS00LTQgMC0yIDYtMTIgNi0xMnMxLjg5LTEuOSAyLTMuNWMtLjczLS45OTQtLjUtMi0uNS0zIDEtMSAzIDIuNSAzIDIuNWgycy43OC0xLjk5MiAyLjUtM2MxIDAgMSAzIDEgMyIgZmlsbD0iI2ZmZiIvPjxwYXRoIGQ9Ik05LjUgMjUuNWEuNS41IDAgMSAxLTEgMCAuNS41IDAgMSAxIDEgMHptNS40MzMtOS43NWEuNSAxLjUgMzAgMSAxLS44NjYtLjUuNSAxLjUgMzAgMSAxIC44NjYuNXoiIGZpbGw9IiMwMDAiLz48L2c+PC9zdmc+",
+    'b': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGcgZmlsbD0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiPjxwYXRoIGQ9Ik05IDM2YzMuMzktLjk3IDEwLjExLjQzIDEzLjUtMiAzLjM5IDIuNDMgMTAuMTEgMS4wMyAxMy41IDIgMCAwIDEuNjUuNTQgMyAyLS42OC45Ny0xLjY1Ljk5LTMgLjUtMy4zOS0uOTctMTAuMTEuNDYtMTMuNS0xLTMuMzkgMS40Ni0xMC4xMS4wMy0xMy41IDEtMS4zNTQuNDktMi4zMjMuNDctMy0uNSAxLjM1NC0xLjk0IDMtMiAzLTJ6Ii8+PHBhdGggZD0iTTE1IDMyYzIuNSAyLjUgMTIuNSAyLjUgMTUgMCAuNS0xLjUgMC0yIDAtMiAwLTIuNS0yLjUtNC0yLjUtNCA1LjUtMS41IDYtMTEuNS01LTE1LjUtMTEgNC0xMC41IDE0LTUgMTUuNSAwIDAtMi41IDEuNS0yLjUgNCAwIDAtLjUuNSAwIDJ6Ii8+PHBhdGggZD0iTTI1IDhhMi41IDIuNSAwIDEgMS01IDAgMi41IDIuNSAwIDEgMSA1IDB6Ii8+PC9nPjxwYXRoIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiIHN0cm9rZT0ibWl0ZXIiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48L2c+PC9zdmc+",
+    'r': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMzloMjd2LTNIOXYzem0zLTN2LTRoMjF2NEgxMnoiLz48cGF0aCBkPSJNMTIgOSBoNHYyaDVWOWg1djJoNVY5aDR2NUgxMXoiIHN0cm9rZS1saW5lY2FwPSJidXR0Ii8+PHBhdGggZD0iTTM0IDE0bC0zIDNIMTRsLTMtMyIvPjxwYXRoIGQ9Ik0zMSAxN3YxMi41SDE0VjE3IiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0zMSAyOS41bDEuNSAyLjVoLTIwbDEuNS0yLjUiLz48cGF0aCBkPSJNMTEgMTRoMjMiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48L2c+PC9zdmc+",
+    'q': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTggMTJhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwem0xNi41LTQuNWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6TTQxIDEyYTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMTYgOC41YTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMzMgOWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6Ii8+PHBhdGggZD0iTTkgMjZjOC41LTEuNSAyMS0xLjUgMjcgMGwyLTEyLTcgMTFWMTFsLTUuNSAxMy41LTMtMTUtMyAxNS01LjUtMTRWMjVMNyAxNGwyIDEyeiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiLz48cGF0aCBkPSJNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiIHN0cm9rZS1saW5lY2FwPSJidXR0Ii8+PHBhdGggZD0iTTExLjUgMzBjMy41LTEgMTguNS0xIDIyIDBNMTIgMzMuNWM2LTEgMTUtMSAyMSAwIiBmaWxsPSJub25lIi8+PC9nPjwvc3ZnPg==",
+    'k': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48cGF0aCBkPSJNMjIuNSAyNXM0LjUtNy41IDMtMTAuNWMwIDAtMS0yLjUtMy0yLjVzLTMgMi41LTMgMi41Yy0xLjUgMyAzIDEwLjUgMyAxMC41IiBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMFYzN3oiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNMTEuNSAzMGM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDAiLz48L2c+PC9zdmc+"
+  },
+  'b': {
+    'p': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48cGF0aCBkPSJNMjIuNSA5Yy0yLjIxIDAtNCAxLjc5LTQgNCAwIC44OS4yOSAxLjcxLjc4IDIuMzhDMTcuMzMgMTYuNSAxNiAxOC41OSAxNiAyMWMwIDIuMDMuOTQgMy44NCAyLjQxIDUuMDMtMyAxLjA2LTcuNDEgNS41NS03LjQxIDEzLjQ3aDIzYzAtNy45Mi00LjQxLTEyLjQxLTcuNDEtMTMuNDcgMS40Ny0xLjE5IDIuNDEtMyAyLjQxLTUuMDMgMC0yLjQxLTEuMzMtNC41LTMuMjgtNS42Mi40OS0uNjcuNzgtMS40OS43OC0yLjM4IDAtMi4yMS0xLjc5LTQtNC00eiIgZmlsbD0iIzAwMCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTIyLjUgMTBjLTEuNjUgMC0zIDEuMzQtMyAzIDAgLjY3LjIyIDEuMjguNTkgMS43OC4zNi40OS44IDEuMTMuOTEgMi4yMi4xMSAxLjA4LS4yMiAyLS45MSAyLjY5QzE4LjY3IDIxLjExIDE3LjUgMjIuODkgMTcuNSAyNWMwIDEuNTIuNyAyLjg4IDEuOCAzLjc3LTIuMjUuOC01LjU1IDQuMTYtNS41NSAxMC4xaDE3LjVjMC01Ljk0LTMuMy05LjMtNS41NS0xMC4xIDEuMS0uODkgMS44LTIuMjUgMS44LTMuNzcgMC0yLjExLTEuMTctMy44OS0yLjU5LTUuMzEtLjY5LS42OS0xLjAyLTEuNjEtLjkxLTIuNjkuMTEtMS4wOS41NS0xLjczLjkxLTIuMjIuMzctLjUuNTktMS4xMS41OS0xLjc4IDAtMS42Ni0xLjM1LTMtMy0zeiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjAuNzUiIG9wYWNpdHk9IjAuMzUiLz48L3N2Zz4=",
+    'n': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyIDEwYzEwLjUgMSAxNi41IDggMTYgMjlIMTVjMC05IDEwLTYuNSA4LTIxIiBmaWxsPSIjMDAwIi8+PHBhdGggZD0iTTI0IDE4Yy4zOCAyLjkxLTUuNTUgNy4zNy04IDktMyAyLTIuODIgNC4zNC01IDQtMS4wNDItLjk0IDEuNDEtMy4wNCAwLTMtMSAwIC4xOSAxLjIzLTEgMi0xIDAtNC4wMDMgMS00LTQgMC0yIDYtMTIgNi0xMnMxLjg5LTEuOSAyLTMuNWMtLjczLS45OTQtLjUtMi0uNS0zIDEtMSAzIDIuNSAzIDIuNWgycy43OC0xLjk5MiAyLjUtM2MxIDAgMSAzIDEgMyIgZmlsbD0iIzAwMCIvPjxwYXRoIGQ9Ik05LjUgMjUuNWEuNS41IDAgMSAxLTEgMCAuNS41IDAgMSAxIDEgMHptNS40MzMtOS43NWEuNSAxLjUgMzAgMSAxLS44NjYtLjUuNSAxLjUgMzAgMSAxIC44NjYuNXoiIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0iI2VjZWNlYyIvPjxwYXRoIGQ9Ik0yNC41NSAxMC40bC0uNDUgMS40NS41LjE1YzMuMTUgMSA1LjY1IDIuNDkgNy45IDYuNzVTMzUuNzUgMjkuMDYgMzUuMjUgMzlsLS4wNS41aDIuMjVsLjA1LS41Yy41LTEwLjA2LS44OC0xNi44NS0zLjI1LTIxLjM0LTIuMzctNC40OS01Ljc5LTYuNjQtOS4xOS03LjE2bC0uNTEtLjF6IiBmaWxsPSIjZWNlY2VjIiBzdHJva2U9Im5vbmUiLz48L2c+PC9zdmc+",
+    'b': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGcgZmlsbD0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiPjxwYXRoIGQ9Ik05IDM2YzMuMzktLjk3IDEwLjExLjQzIDEzLjUtMiAzLjM5IDIuNDMgMTAuMTEgMS4wMyAxMy41IDIgMCAwIDEuNjUuNTQgMyAyLS42OC45Ny0xLjY1Ljk5LTMgLjUtMy4zOS0uOTctMTAuMTEuNDYtMTMuNS0xLTMuMzkgMS40Ni0xMC4xMS4wMy0xMy41IDEtMS4zNTQuNDktMi4zMjMuNDctMy0uNSAxLjM1NC0xLjk0IDMtMiAzLTJ6Ii8+PHBhdGggZD0iTTE1IDMyYzIuNSAyLjUgMTIuNSAyLjUgMTUgMCAuNS0xLjUgMC0yIDAtMiAwLTIuNS0yLjUtNC0yLjUtNCA1LjUtMS41IDYtMTEuNS01LTE1LjUtMTEgNC0xMC41IDE0LTUgMTUuNSAwIDAtMi41IDEuNS0yLjUgNCAwIDAtLjUuNSAwIDJ6Ii8+PHBhdGggZD0iTTI1IDhhMi41IDIuNSAwIDEgMS01IDAgMi41IDIuNSAwIDEgMSA1IDB6Ii8+PC9nPjxwYXRoIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiIHN0cm9rZT0iI2VjZWNlYyIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjwvZz48L3N2Zz4=",
+    'r': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjMDAwIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMzloMjd2LTNIOXYzem0zLjUtN2wxLjUtMi41aDE3bDEuNSAyLjVoLTIwem0tLjUgNHYtNGgyMXY0SDEyeiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiLz48cGF0aCBkPSJNMTEgOXY1aDR2LTJoNXYyaDV2LTJoNXYyaDRWOUgxMXoiIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIi8+PHBhdGggZD0iTTE0IDI5LjV2LTEzaDE3djEzSDE0eiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48cGF0aCBkPSJNMTQgMTYuNUwxMSAxNGgyM2wtMyAyLjVIMTR6Ii8+PHBhdGggZD0iTTEyIDM1LjVoMjFtLTIwLTRoMTltLTE4LTJoMTdtLTE3LTEzaDE3TTExIDE0aDIzIiBmaWxsPSJub25lIiBzdHJva2U9IiNlY2VjZWMiIHN0cm9rZS13aWR0aD0iMSIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjwvZz48L3N2Zz4=",
+    'q': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSIjMDAwIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGcgc3Ryb2tlPSJub25lIiBmaWxsPSIjMDAwIj48Y2lyY2xlIGN4PSI2IiBjeT0iMTIiIHI9IjIuNzUiLz48Y2lyY2xlIGN4PSIxNCIgY3k9IjkiIHI9IjIuNzUiLz48Y2lyY2xlIGN4PSIyMi41IiBjeT0iOCIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjMxIiBjeT0iOSIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjM5IiBjeT0iMTIiIHI9IjIuNzUiLz48L2c+PHBhdGggZD0iTTkgMjZjOC41LTEuNSAyMS0xLjUgMjcgMGwyLjUtMTIuNUwzMSAyNWwtLjMtMTQuMS01LjIgMTMuNi0zLTE0LjUtMyAxNC41LTUuMi0xMy42TDE0IDI1IDYuNSAxMy41IDkgMjZ6IiBzdHJva2UtbGluZWNhcD0iYnV0dCIvPjxwYXRoIGQ9Ik05IDI2YzAgMiAxLjUgMiAyLjUgNCAxIDEuNSAxIDEgLjUgMy41LTEuNSAxLTEuNSAyLjUtMS41IDIuNS0xLjUgMS41LjUgMi41LjUgMi41IDYuNSAxIDE2LjUgMSAyMyAwIDAgMCAxLjUtMSAwLTIuNSAwIDAgLjUtMS41LTEtMi41LS41LTIuNS0uNS0yIC41LTMuNSAxLTIgMi41LTIgMi41LTQtOC41LTEuNS0xOC41LTEuNS0yNyAweiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiLz48Y2lyY2xlIGN4PSI2IiBjeT0iMTIiIHI9IjEuNSIgZmlsbD0iI2VjZWNlYyIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iMTQiIGN5PSI5IiByPSIxLjUiIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjIyLjUiIGN5PSI4IiByPSIxLjUiIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjMxIiBjeT0iOSIgcj0iMS41IiBmaWxsPSIjZWNlY2VjIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjEyIiByPSIxLjUiIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0ibm9uZSIvPjxwYXRoIGQ9Ik0xMSAzOC41YTM1IDM1IDEgMCAwIDIzIDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VjZWNlYyIgc3Ryb2tlLXdpZHRoPSIxIi8+PHBhdGggZD0iTTExIDI5YTM1IDM1IDEgMCAxIDIzIDBtLTIxLjUgMi41aDIwbS0yMSAzYTM1IDM1IDEgMCAwIDIyIDBtLTIzIDNhMzUgMzUgMSAwIDAgMjQgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZWNlY2VjIi8+PC9nPjwvc3ZnPg==",
+    'k': "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NSA0NSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz48cGF0aCBkPSJNMjIuNSAyNXM0LjUtNy41IDMtMTAuNWMwIDAtMS0yLjUtMy0yLjVzLTMgMi41LTMgMi41Yy0xLjUgMyAzIDEwLjUgMyAxMC41IiBmaWxsPSIjMDAwIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMFYzN3oiIGZpbGw9IiMwMDAiLz48cGF0aCBkPSJNMTEuNSAzMGM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDAiIHN0cm9rZT0iI2VjZWNlYyIvPjxwYXRoIGQ9Ik0yMCA4aDUiIHN0cm9rZT0iI2VjZWNlYyIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIvPjxwYXRoIGQ9Ik0yMi41IDZ2NS42MyIgc3Ryb2tlPSIjZWNlY2VjIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIi8+PHBhdGggZD0iTTMyIDI5LjVzOC41LTQgNi4wMy05LjY1QzM0LjE1IDE0IDI1IDE4IDIyLjUgMjQuNWwuMDEgMi4xLS4wMS0yLjFDMjAgMTggOS45MDYgMTQgNi45OTcgMTkuODVjLTIuNDk3IDUuNjUgNC44NTMgOSA0Ljg1MyA5IiBzdHJva2U9IiNlY2VjZWMiLz48L2c+PC9zdmc+"
+  }
+};
+
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+// Engine & State
+let chess = new Chess();
+let isFlipped = false;
+let selectedSquare = null;
+let legalMoves = [];
+let lastMoveSquares = [];
+let errorSquare = null;
+
+// Repertoire Tree & Decompiled Lines
+let originalPgnRaw = "";
+let treeRoot = null;
+let currentTreeNode = null;
+let decompiledLines = [];
+let activeLineIndex = 0;
+let moveHistory = []; // { san, fen, node, comment }
+let currentPly = 0;
+
+// Interactive Practice Mode State
+let isPracticeMode = false;
+let practiceUserSide = 'w'; // 'w' = White, 'b' = Black
+
+// Sample Scotch PGN
+const SAMPLE_SCOTCH_PGN = `[Event "white Repertoire"]
+[Site "chessbook.com"]
+[Date ""]
+[Round "N/A"]
+[White "N/A"]
+[Black "N/A"]
+[Result "*"]
+
+1. e4 {Controls the center and frees bishops} e5 2. Nf3 {Develops knight and attacks the e5 pawn} Nc6 {Defends e5} 3. d4 {Scotch Game: strikes open the center} exd4 (3... d6 {Philidor Defense transposition} 4. dxe5 dxe5 5. Qxd8+ Nxd8 (5... Kxd8 6. Nc3 Bd7 7. Bc4) 6. Nxe5 Nf6 7. Nc3 Bb4 8. f3 O-O 9. Nd3 Bxc3+ 10. bxc3 b6 11. Nf4 Re8 12. a4 Ne6 13. Kf2 a5 14. g4) (3... Nf6 {Two Knights counter-attack on e4} 4. d5 Nd4 5. Nxe5 d6 6. Nc4 c5 7. c3 Nb5 8. a4 Nc7 9. Bd3 Be7 10. O-O) (3... f6 4. Bc4 exd4 5. O-O Bc5 6. c3 dxc3 7. Bxg8 Rxg8 8. Qd5) (3... d5 4. Nxe5 Nxe5 5. dxe5 d4 6. c3 Bc5 7. Bc4 Ne7 8. e6 Bxe6 9. Bxe6 fxe6 10. Qh5+ Kf8 11. Qxc5) (3... Bb4+ 4. c3 Ba5 5. a4 Nf6 6. b4 Bb6 7. a5) (3... Nxd4 4. Nxd4 exd4 5. Qxd4 Nf6 (5... d6 6. Nc3 Nf6 7. Bf4 Be7 8. O-O-O O-O 9. f3 Be6 10. Kb1 c5 11. Qf2 (11. Qe3 a6 12. Bxd6 Bxd6 13. e5 Ne8 14. exd6 Qa5 15. a3 Rd8 16. Ne4) Qa5 12. Bxd6 Bxd6 13. Rxd6 b5 14. Qxc5 Rac8 15. Qxb5 Bxa2+ 16. Nxa2 Qe1+ 17. Nc1 Rb8 18. Qd3) (5... c5 6. Qe3 d6 7. Nc3 Nf6 8. Qg3 Be6 9. Bb5+ Bd7 10. Bxd7+ Qxd7 11. Bg5 Be7 12. O-O-O O-O-O 13. e5 Nh5 14. Qh4 Bxg5+ 15. Qxg5 g6 16. Rxd6 Qc7 17. Rhd1 Rxd6 18. exd6 Qd7 19. Qxc5+) 6. e5 Nh5 7. g4) 4. Nxd4 {Recaptures pawn and dominates central squares} Nxd4 (4... Bc5 {Classical Variation: pressures d4} 5. Nb3 Bb6 6. Qe2 d6 7. Nc3 Nf6 8. Be3 O-O 9. O-O-O Re8 10. f3 Be6 11. Kb1 Qe7 12. g4 Nd7 13. h4 Nde5 14. g5 Bc4 15. Qf2 Bxf1 16. Qxf1 Bxe3 17. Nd5 Qe6 18. Nxe3 a5 19. a3 b5 20. Nd5 a4 21. Nd2) (4... Nf6 {Mieses Variation: attacks e4} 5. Nc3 Bb4 (5... Nxd4 6. Qxd4 d6 7. Bf4 Be7 8. O-O-O O-O 9. f3 Be6 10. Kb1 c5 11. Qf2 (11. Qe3 a6 12. Bxd6 Bxd6 13. e5 Ne8 14. exd6 Qa5 15. a3 Rd8 16. Ne4) Qa5 12. Bxd6 Bxd6 13. Rxd6 b5 14. Qxc5 Rac8 15. Qxb5 Bxa2+ 16. Nxa2 Qe1+ 17. Nc1 Rb8 18. Qd3) 6. Nxc6 bxc6 7. Bd3 d5 8. Bd2 O-O 9. O-O Bxc3 10. Bxc3 dxe4 11. Bxf6 Qxf6 12. Bxe4 Qxb2 13. Bxc6 Rb8 14. Rb1 Qxb1 15. Qxb1 Rxb1 16. Rxb1 Be6 17. Rb7 Rd8 18. Kf1 Bxa2 19. Rxa7 Bc4+ 20. Ke1 Rc8 21. Bd7 Rd8 22. Rxc7 Be6 23. Bxe6) 5. Qxd4 Nf6 (5... d6 6. Nc3 Nf6 7. Bf4 Be7 8. O-O-O O-O 9. f3 Be6 10. Kb1 c5 11. Qf2 (11. Qe3 a6 12. Bxd6 Bxd6 13. e5 Ne8 14. exd6 Qa5 15. a3 Rd8 16. Ne4) Qa5 12. Bxd6 Bxd6 13. Rxd6 b5 14. Qxc5 Rac8 15. Qxb5 Bxa2+ 16. Nxa2 Qe1+ 17. Nc1 Rb8 18. Qd3) (5... c5 6. Qe3 d6 7. Nc3 Nf6 8. Qg3 Be6 9. Bb5+ Bd7 10. Bxd7+ Qxd7 11. Bg5 Be7 12. O-O-O O-O-O 13. e5 Nh5 14. Qh4 Bxg5+ 15. Qxg5 g6 16. Rxd6 Qc7 17. Rhd1 Rxd6 18. exd6 Qd7 19. Qxc5+) 6. e5 Nh5 7. g4 *`;
+
+window.addEventListener('DOMContentLoaded', () => {
+  renderBoard();
+  loadSampleScotch();
+  setupKeyboardShortcuts();
+});
+
+// ----------------------------------------------------
+// KEYBOARD ARROW KEY NAVIGATION
+// ----------------------------------------------------
+function setupKeyboardShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    if (tag === 'textarea' || tag === 'input') {
+      return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      stepMove(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      stepMove(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      goToStart();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      goToEnd();
+    } else if (e.key === 'f' || e.key === 'F') {
+      e.preventDefault();
+      flipBoard();
+    }
+  });
+}
+
+// ----------------------------------------------------
+// BOARD RENDERING & INTERACTION
+// ----------------------------------------------------
+function renderBoard() {
+  const boardEl = document.getElementById('chessboard');
+  boardEl.innerHTML = '';
+
+  const displayRanks = isFlipped ? [...RANKS].reverse() : RANKS;
+  const displayFiles = isFlipped ? [...FILES].reverse() : FILES;
+
+  displayRanks.forEach((rank, rIdx) => {
+    displayFiles.forEach((file, fIdx) => {
+      const square = `${file}${rank}`;
+      const isDark = (rIdx + fIdx) % 2 === 1;
+
+      const sqEl = document.createElement('div');
+      sqEl.className = `square ${isDark ? 'dark' : 'light'}`;
+      sqEl.dataset.square = square;
+
+      if (fIdx === 0) {
+        const rankLbl = document.createElement('span');
+        rankLbl.className = 'square-coord coord-rank';
+        rankLbl.innerText = rank;
+        sqEl.appendChild(rankLbl);
+      }
+      if (rIdx === 7) {
+        const fileLbl = document.createElement('span');
+        fileLbl.className = 'square-coord coord-file';
+        fileLbl.innerText = file;
+        sqEl.appendChild(fileLbl);
+      }
+
+      if (selectedSquare === square) {
+        sqEl.classList.add('selected');
+      }
+      if (lastMoveSquares.includes(square)) {
+        sqEl.classList.add('last-move');
+      }
+      if (errorSquare === square) {
+        sqEl.classList.add('error-square');
+      }
+
+      const moveOption = legalMoves.find(m => m.to === square);
+      if (moveOption) {
+        if (moveOption.captured) {
+          const capRing = document.createElement('div');
+          capRing.className = 'capture-ring';
+          sqEl.appendChild(capRing);
+        } else {
+          const dot = document.createElement('div');
+          dot.className = 'dest-dot';
+          sqEl.appendChild(dot);
+        }
+      }
+
+      const piece = chess.get(square);
+      if (piece) {
+        const img = document.createElement('img');
+        img.className = 'piece-img';
+        img.src = PIECE_SVGS[piece.color][piece.type];
+        img.draggable = true;
+        
+        img.ondragstart = (e) => handleDragStart(e, square);
+        sqEl.appendChild(img);
+      }
+
+      sqEl.ondragover = (e) => e.preventDefault();
+      sqEl.ondrop = (e) => handleDrop(e, square);
+      sqEl.onclick = () => handleSquareClick(square);
+
+      boardEl.appendChild(sqEl);
+    });
+  });
+
+  document.getElementById('fen-display').innerText = chess.fen();
+  const turn = chess.turn() === 'w' ? 'White to move' : 'Black to move';
+  
+  if (isPracticeMode) {
+    const isUserTurn = chess.turn() === practiceUserSide;
+    document.getElementById('practice-status-text').innerText = isUserTurn 
+      ? `🎯 Your turn (${practiceUserSide==='w'?'White':'Black'}): Play move from memory!`
+      : `⏳ Opponent is responding...`;
+  }
+}
+
+// ----------------------------------------------------
+// PIECE DRAG & DROP / CLICK MOVEMENT
+// ----------------------------------------------------
+function handleSquareClick(square) {
+  if (!selectedSquare) {
+    const piece = chess.get(square);
+    if (piece && piece.color === chess.turn()) {
+      if (isPracticeMode && chess.turn() !== practiceUserSide) return;
+      selectedSquare = square;
+      legalMoves = chess.moves({ square: square, verbose: true });
+    }
+  } else {
+    if (selectedSquare === square) {
+      selectedSquare = null;
+      legalMoves = [];
+    } else {
+      makeMove(selectedSquare, square);
+    }
+  }
+  renderBoard();
+}
+
+function handleDragStart(e, square) {
+  const piece = chess.get(square);
+  if (piece && piece.color === chess.turn()) {
+    if (isPracticeMode && chess.turn() !== practiceUserSide) return;
+    selectedSquare = square;
+    legalMoves = chess.moves({ square: square, verbose: true });
+    e.dataTransfer.setData('text/plain', square);
+    renderBoard();
+  }
+}
+
+function handleDrop(e, targetSquare) {
+  e.preventDefault();
+  const sourceSquare = e.dataTransfer.getData('text/plain') || selectedSquare;
+  if (sourceSquare && sourceSquare !== targetSquare) {
+    makeMove(sourceSquare, targetSquare);
+  }
+}
+
+function makeMove(from, to) {
+  try {
+    const move = chess.move({ from, to, promotion: 'q' });
+    if (move) {
+      errorSquare = null;
+      lastMoveSquares = [from, to];
+      selectedSquare = null;
+      legalMoves = [];
+      
+      if (isPracticeMode) {
+        handlePracticeUserMove(move);
+      } else {
+        recordPlayerMove(move);
+      }
+      renderBoard();
+      return true;
+    }
+  } catch (err) {
+    console.warn("Illegal move:", from, to);
+  }
+  selectedSquare = null;
+  legalMoves = [];
+  renderBoard();
+  return false;
+}
+
+function flipBoard() {
+  isFlipped = !isFlipped;
+  renderBoard();
+}
+
+// ----------------------------------------------------
+// PRACTICE / LINE QUIZ MODE
+// ----------------------------------------------------
+function togglePracticeMode() {
+  isPracticeMode = !isPracticeMode;
+  const btn = document.getElementById('practice-btn');
+  const alertBox = document.getElementById('practice-alert');
+
+  if (isPracticeMode) {
+    btn.className = "btn btn-warning";
+    btn.innerText = "⏹ Exit Practice";
+    alertBox.style.display = "flex";
+    
+    // Determine user color from repertoire line or starting side
+    practiceUserSide = 'w';
+    goToStart();
+    
+    // If black repertoire, auto-play move 1
+    if (practiceUserSide === 'b' && chess.turn() === 'w') {
+      autoPlayOpponentMove();
+    }
+  } else {
+    btn.className = "btn btn-success";
+    btn.innerText = "🎯 Practice Line";
+    alertBox.style.display = "none";
+    errorSquare = null;
+    updateToPly(currentPly);
+  }
+}
+
+function handlePracticeUserMove(move) {
+  const lineNodes = decompiledLines[activeLineIndex] || [];
+  const expectedNode = lineNodes[currentPly]; // expected move at this ply
+
+  if (expectedNode && expectedNode.san === move.san) {
+    // Correct Move!
+    currentPly++;
+    currentTreeNode = expectedNode;
+    
+    // Update move history
+    if (currentPly >= moveHistory.length) {
+      moveHistory.push({ san: move.san, node: expectedNode, fen: chess.fen(), comment: expectedNode.comment });
+    }
+    
+    updateOpeningAndNoteDisplay();
+    renderNotationHistory();
+
+    // Check if line complete
+    if (currentPly >= lineNodes.length) {
+      document.getElementById('practice-status-text').innerText = `🎉 Repertoire Line Completed! (100% Memorized)`;
+      return;
+    }
+
+    // Auto-play opponent response after short delay
+    setTimeout(() => {
+      autoPlayOpponentMove();
+    }, 400);
+
+  } else {
+    // Wrong Move! Shake board and show explanation
+    chess.undo();
+    errorSquare = move.to;
+    
+    const boardEl = document.getElementById('chessboard');
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth; // trigger reflow
+    boardEl.classList.add('shake');
+
+    const expectedSan = expectedNode ? expectedNode.san : "Unknown";
+    const noteHint = expectedNode && expectedNode.comment ? ` — Note: ${expectedNode.comment}` : '';
+    document.getElementById('practice-status-text').innerText = `❌ Incorrect move! Prepared response was: ${expectedSan}${noteHint}`;
+  }
+}
+
+function autoPlayOpponentMove() {
+  if (!isPracticeMode) return;
+  const lineNodes = decompiledLines[activeLineIndex] || [];
+  const nextOpponentNode = lineNodes[currentPly];
+
+  if (nextOpponentNode) {
+    try {
+      const oppMove = chess.move(nextOpponentNode.san);
+      if (oppMove) {
+        lastMoveSquares = [oppMove.from, oppMove.to];
+        currentPly++;
+        currentTreeNode = nextOpponentNode;
+        if (currentPly >= moveHistory.length) {
+          moveHistory.push({ san: oppMove.san, node: nextOpponentNode, fen: chess.fen(), comment: nextOpponentNode.comment });
+        }
+        updateOpeningAndNoteDisplay();
+        renderNotationHistory();
+        renderBoard();
+      }
+    } catch (e) {
+      console.error("Opponent autoplay error", e);
+    }
+  }
+}
+
+// ----------------------------------------------------
+// HOVER PREVIEW SYSTEM
+// ----------------------------------------------------
+let isHoverPreviewing = false;
+
+function previewCandidateMove(childNode) {
+  if (isPracticeMode) return;
+  if (!childNode || !childNode.fen) return;
+  isHoverPreviewing = true;
+  
+  const previewChess = new Chess(childNode.fen);
+  
+  let moveSquares = [];
+  try {
+    const tempCurrent = new Chess(chess.fen());
+    const legal = tempCurrent.moves({ verbose: true });
+    const moveMatch = legal.find(m => m.san === childNode.san);
+    if (moveMatch) {
+      moveSquares = [moveMatch.from, moveMatch.to];
+    }
+  } catch (e) {}
+
+  renderBoardCustom(previewChess, moveSquares, `👁️ Previewing: ${childNode.san}`);
+}
+
+function cancelPreviewCandidateMove() {
+  if (!isHoverPreviewing) return;
+  isHoverPreviewing = false;
+  renderBoard();
+  document.getElementById('move-indicator').style.color = '#38bdf8';
+  document.getElementById('move-indicator').innerText = currentPly === 0 ? "Starting Position" : `Move ${Math.ceil(currentPly/2)}${currentPly%2===0?'...':'.'} ${moveHistory[currentPly]?.san}`;
+}
+
+function renderBoardCustom(customChess, customLastMoves = [], indicatorText = null) {
+  const boardEl = document.getElementById('chessboard');
+  boardEl.innerHTML = '';
+
+  const displayRanks = isFlipped ? [...RANKS].reverse() : RANKS;
+  const displayFiles = isFlipped ? [...FILES].reverse() : FILES;
+
+  displayRanks.forEach((rank, rIdx) => {
+    displayFiles.forEach((file, fIdx) => {
+      const square = `${file}${rank}`;
+      const isDark = (rIdx + fIdx) % 2 === 1;
+
+      const sqEl = document.createElement('div');
+      sqEl.className = `square ${isDark ? 'dark' : 'light'}`;
+      sqEl.dataset.square = square;
+
+      if (fIdx === 0) {
+        const rankLbl = document.createElement('span');
+        rankLbl.className = 'square-coord coord-rank';
+        rankLbl.innerText = rank;
+        sqEl.appendChild(rankLbl);
+      }
+      if (rIdx === 7) {
+        const fileLbl = document.createElement('span');
+        fileLbl.className = 'square-coord coord-file';
+        fileLbl.innerText = file;
+        sqEl.appendChild(fileLbl);
+      }
+
+      if (customLastMoves.includes(square)) {
+        sqEl.classList.add('last-move');
+      }
+
+      const piece = customChess.get(square);
+      if (piece) {
+        const img = document.createElement('img');
+        img.className = 'piece-img';
+        img.src = PIECE_SVGS[piece.color][piece.type];
+        img.draggable = false;
+        sqEl.appendChild(img);
+      }
+
+      boardEl.appendChild(sqEl);
+    });
+  });
+
+  document.getElementById('fen-display').innerText = customChess.fen();
+  if (indicatorText) {
+    document.getElementById('move-indicator').innerText = indicatorText;
+    document.getElementById('move-indicator').style.color = '#f59e0b';
+  }
+}
+
+// ----------------------------------------------------
+// PGN MULTI-VARIATION TREE DECOMPILER
+// ----------------------------------------------------
+class TreeNode {
+  constructor(san = null, parent = null, ply = 0, fen = "", comment = "") {
+    this.san = san;
+    this.parent = parent;
+    this.children = [];
+    this.comment = comment;
+    this.ply = ply;
+    this.fen = fen;
+  }
+}
+
+function decompilePgn(rawText) {
+  const pgnText = rawText || document.getElementById('pgn-input').value.trim();
+  if (!pgnText) {
+    alert("Please enter or paste a PGN string.");
+    return;
+  }
+
+  originalPgnRaw = pgnText;
+
+  // 1. Strip headers
+  let body = pgnText.replace(/\[.*?\]/g, '').trim();
+  body = body.replace(/(\*|1-0|0-1|1\/2-1\/2)\s*$/, '').trim();
+
+  // 2. Tokenize moves, comments {...}, and parenthetical variations (...)
+  const tokenPattern = /(\()|(\))|(\{[\s\S]*?\})|(\$\d+)|([0-9]+\.+)|([a-zA-Z0-9+#=_-]+)/g;
+  let tokens = [];
+  let match;
+
+  while ((match = tokenPattern.exec(body)) !== null) {
+    if (match[1]) tokens.push({ type: 'open_paren' });
+    else if (match[2]) tokens.push({ type: 'close_paren' });
+    else if (match[3]) tokens.push({ type: 'comment', val: match[3] });
+    else if (match[4]) tokens.push({ type: 'nag', val: match[4] });
+    else if (match[5]) tokens.push({ type: 'move_num', val: match[5] });
+    else if (match[6]) tokens.push({ type: 'san', val: match[6] });
+  }
+
+  // 3. Build recursive Move Tree with real Chess.js simulation
+  const tempSim = new Chess();
+  const root = new TreeNode("START", null, 0, tempSim.fen());
+  let stack = [root];
+
+  for (const token of tokens) {
+    let curr = stack[stack.length - 1];
+
+    if (token.type === 'open_paren') {
+      stack.push(curr.parent ? curr.parent : root);
+    } else if (token.type === 'close_paren') {
+      if (stack.length > 1) stack.pop();
+    } else if (token.type === 'comment' && token.val) {
+      if (curr) curr.comment = token.val.replace(/^\{|\}$/g, '').trim();
+    } else if (token.type === 'san' && token.val) {
+      const branchSim = new Chess(curr.fen);
+      try {
+        const m = branchSim.move(token.val);
+        if (m) {
+          const node = new TreeNode(m.san, curr, curr.ply + 1, branchSim.fen());
+          curr.children.push(node);
+          stack[stack.length - 1] = node;
+        }
+      } catch (err) {
+        const node = new TreeNode(token.val, curr, curr.ply + 1, curr.fen);
+        curr.children.push(node);
+        stack[stack.length - 1] = node;
+      }
+    }
+  }
+
+  treeRoot = root;
+
+  // 4. Extract all terminal lines
+  decompiledLines = [];
+  function dfs(node, path) {
+    if (!node.children || node.children.length === 0) {
+      if (path.length > 0) {
+        decompiledLines.push(path);
+      }
+      return;
+    }
+    for (let child of node.children) {
+      dfs(child, [...path, child]);
+    }
+  }
+  dfs(root, []);
+
+  renderLinesList();
+  if (decompiledLines.length > 0) {
+    selectLine(0);
+  }
+}
+
+function renderLinesList() {
+  const container = document.getElementById('lines-list');
+  const countBadge = document.getElementById('line-count-badge');
+  const totalCount = document.getElementById('total-lines-count');
+
+  countBadge.innerText = `${decompiledLines.length} Lines`;
+  totalCount.innerText = decompiledLines.length;
+  container.innerHTML = '';
+
+  decompiledLines.forEach((lineNodes, idx) => {
+    const card = document.createElement('div');
+    card.className = `line-card ${idx === activeLineIndex ? 'active' : ''}`;
+    card.onclick = () => selectLine(idx);
+
+    const moveStrings = formatLineMoves(lineNodes);
+    const name = classifyOpeningName(moveStrings, idx + 1);
+
+    card.innerHTML = `
+      <div class="line-header">
+        <span class="line-title">${name}</span>
+        <span>${lineNodes.length} plies</span>
+      </div>
+      <div class="line-moves">${moveStrings}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function formatLineMoves(nodes, includeComments = false) {
+  let res = [];
+  nodes.forEach((node, idx) => {
+    const ply = idx + 1;
+    const moveNum = Math.ceil(ply / 2);
+    let str = "";
+    if (ply % 2 === 1) {
+      str = `${moveNum}. ${node.san}`;
+    } else {
+      str = node.san;
+    }
+    if (includeComments && node.comment) {
+      str += ` {${node.comment}}`;
+    }
+    res.push(str);
+  });
+  return res.join(' ');
+}
+
+function classifyOpeningName(moveStr, index) {
+  if (moveStr.includes('Bc5')) return 'Scotch: Classical (4...Bc5)';
+  if (moveStr.includes('Bb4')) return 'Scotch: Mieses / Bb4+';
+  if (moveStr.includes('Nxd4 5. Qxd4')) return 'Scotch: 4...Nxd4 5. Qxd4';
+  if (moveStr.includes('3... d6')) return 'Scotch: 3...d6 Philidor';
+  if (moveStr.includes('3... Nf6')) return 'Scotch: Two Knights Counter';
+  if (moveStr.includes('3... f6')) return 'Scotch: 3...f6';
+  if (moveStr.includes('3... d5')) return 'Scotch: 3...d5 Gambit';
+  return `Variation ${index}`;
+}
+
+// ----------------------------------------------------
+// OPENING & NOTE MANAGEMENT
+// ----------------------------------------------------
+async function updateOpeningAndNoteDisplay() {
+  const curr = moveHistory[currentPly];
+  const fen = curr ? curr.fen : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+  // Display Note
+  const noteInput = document.getElementById('move-note-input');
+  noteInput.value = (curr && curr.node && curr.node.comment) ? curr.node.comment : "";
+
+  // Query Lichess / Masters Opening API for live ECO & Opening Name
+  fetchOpeningFromLichess(fen);
+}
+
+let lichessCache = {};
+async function fetchOpeningFromLichess(fen) {
+  const normalizedFen = fen.split(' ').slice(0, 4).join(' ');
+  if (lichessCache[normalizedFen]) {
+    applyOpeningData(lichessCache[normalizedFen]);
+    return;
+  }
+
+  try {
+    const res = await fetch(`https://explorer.lichess.ovh/masters?fen=${encodeURIComponent(fen)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.opening) {
+        lichessCache[normalizedFen] = data.opening;
+        applyOpeningData(data.opening);
+        return;
+      }
+    }
+  } catch (e) {}
+
+  // Fallback heuristic
+  const movesSoFar = moveHistory.slice(1, currentPly + 1).map(m => m.san).join(' ');
+  let name = classifyOpeningName(movesSoFar, activeLineIndex + 1);
+  let eco = movesSoFar.includes('d4') ? 'C45' : 'C44';
+  applyOpeningData({ name, eco });
+}
+
+function applyOpeningData(op) {
+  document.getElementById('opening-name-text').innerText = op.name || 'Scotch Game';
+  document.getElementById('eco-code-text').innerText = op.eco || 'C45';
+}
+
+function onNoteTyped() {
+  const text = document.getElementById('move-note-input').value;
+  const curr = moveHistory[currentPly];
+  if (curr && curr.node) {
+    curr.node.comment = text;
+    curr.comment = text;
+  }
+}
+
+function saveCurrentNote() {
+  onNoteTyped();
+  alert('Note saved for current position! It will be preserved in PGN exports.');
+}
+
+// ----------------------------------------------------
+// LINE PLAYTHROUGH & BRANCH SELECTION
+// ----------------------------------------------------
+function selectLine(index) {
+  activeLineIndex = index;
+  const cards = document.querySelectorAll('.line-card');
+  cards.forEach((c, i) => c.classList.toggle('active', i === index));
+
+  const activeNodes = decompiledLines[index] || [];
+  buildHistory(activeNodes);
+  goToStart();
+}
+
+function buildHistory(nodes) {
+  moveHistory = [{ san: 'START', node: treeRoot, fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", comment: "" }];
+  for (let n of nodes) {
+    moveHistory.push({ san: n.san, node: n, fen: n.fen, comment: n.comment });
+  }
+}
+
+function updateToPly(ply) {
+  currentPly = ply;
+  const curr = moveHistory[ply];
+  currentTreeNode = curr ? curr.node : treeRoot;
+
+  chess = new Chess(curr ? curr.fen : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+  selectedSquare = null;
+  legalMoves = [];
+  lastMoveSquares = [];
+  errorSquare = null;
+
+  renderBoard();
+
+  document.getElementById('move-indicator').style.color = '#38bdf8';
+  document.getElementById('move-indicator').innerText = ply === 0 ? "Starting Position" : `Move ${Math.ceil(ply/2)}${ply%2===0?'...':'.'} ${curr.san}`;
+  
+  updateOpeningAndNoteDisplay();
+  renderNotationHistory();
+  renderCandidateBranches();
+}
+
+function renderNotationHistory() {
+  const container = document.getElementById('notation-history');
+  container.innerHTML = '';
+
+  for (let i = 1; i < moveHistory.length; i++) {
+    const ply = i;
+    const moveNum = Math.ceil(ply / 2);
+    if (ply % 2 === 1) {
+      const numSpan = document.createElement('span');
+      numSpan.style.color = '#64748b';
+      numSpan.innerText = ` ${moveNum}. `;
+      container.appendChild(numSpan);
+    }
+
+    const moveSpan = document.createElement('span');
+    moveSpan.className = `notation-move ${i === currentPly ? 'active' : ''}`;
+    moveSpan.innerText = moveHistory[i].san;
+    if (moveHistory[i].comment) {
+      moveSpan.title = `Note: ${moveHistory[i].comment}`;
+    }
+    moveSpan.onclick = () => updateToPly(i);
+    container.appendChild(moveSpan);
+  }
+}
+
+function renderCandidateBranches() {
+  const container = document.getElementById('candidate-branches');
+  const countEl = document.getElementById('candidate-count');
+  container.innerHTML = '';
+
+  if (!currentTreeNode || !currentTreeNode.children || currentTreeNode.children.length === 0) {
+    countEl.innerText = '0';
+    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">End of prepared repertoire line.</div>';
+    return;
+  }
+
+  const children = currentTreeNode.children;
+  countEl.innerText = children.length;
+
+  children.forEach((child) => {
+    const btn = document.createElement('div');
+    btn.className = 'candidate-btn';
+    
+    let sublineCount = 0;
+    function countLeaves(n) {
+      if (!n.children || n.children.length === 0) { sublineCount++; return; }
+      for (let c of n.children) countLeaves(c);
+    }
+    countLeaves(child);
+
+    btn.onmouseenter = () => previewCandidateMove(child);
+    btn.onmouseleave = () => cancelPreviewCandidateMove();
+    btn.onclick = () => {
+      cancelPreviewCandidateMove();
+      branchInto(child);
+    };
+
+    const noteSnippet = child.comment ? ` — "${child.comment}"` : '';
+
+    btn.innerHTML = `
+      <div>
+        <div class="candidate-move">${child.san}</div>
+        <div style="font-size:0.72rem; color:#94a3b8;">${child.children.length > 0 ? 'Cont: ' + child.children[0].san : 'End of line'}${noteSnippet}</div>
+      </div>
+      <div class="candidate-meta">
+        <div style="color:var(--accent); font-weight:700;">${sublineCount} ${sublineCount===1?'Line':'Lines'}</div>
+        <div style="font-size:0.68rem; color:#64748b;">Click to branch &rarr;</div>
+      </div>
+    `;
+    container.appendChild(btn);
+  });
+}
+
+function branchInto(targetChildNode) {
+  const currentPath = moveHistory.slice(1, currentPly + 1).map(m => m.node);
+  const targetPath = [...currentPath, targetChildNode];
+
+  const matchIdx = decompiledLines.findIndex(line => {
+    if (line.length < targetPath.length) return false;
+    for (let i = 0; i < targetPath.length; i++) {
+      if (line[i] !== targetPath[i]) return false;
+    }
+    return true;
+  });
+
+  if (matchIdx !== -1) {
+    activeLineIndex = matchIdx;
+    renderLinesList();
+    buildHistory(decompiledLines[matchIdx]);
+    updateToPly(currentPly + 1);
+  }
+}
+
+function recordPlayerMove(move) {
+  // If move matches an existing branch child, branch into it
+  if (currentTreeNode && currentTreeNode.children) {
+    const matchChild = currentTreeNode.children.find(c => c.san === move.san);
+    if (matchChild) {
+      branchInto(matchChild);
+      return;
+    }
+  }
+
+  // Otherwise, dynamically add new branch to the tree!
+  const newNode = new TreeNode(move.san, currentTreeNode, currentPly + 1, chess.fen());
+  if (currentTreeNode) {
+    currentTreeNode.children.push(newNode);
+  }
+
+  moveHistory = moveHistory.slice(0, currentPly + 1);
+  moveHistory.push({ san: move.san, node: newNode, fen: chess.fen(), comment: "" });
+  currentPly++;
+  currentTreeNode = newNode;
+
+  // Re-extract decompiled lines to include new branch
+  decompiledLines = [];
+  function dfs(node, path) {
+    if (!node.children || node.children.length === 0) {
+      if (path.length > 0) decompiledLines.push(path);
+      return;
+    }
+    for (let child of node.children) dfs(child, [...path, child]);
+  }
+  dfs(treeRoot, []);
+  activeLineIndex = decompiledLines.length - 1;
+
+  renderLinesList();
+  updateOpeningAndNoteDisplay();
+  renderNotationHistory();
+  renderCandidateBranches();
+}
+
+// ----------------------------------------------------
+// NAVIGATION CONTROLS
+// ----------------------------------------------------
+function stepMove(delta) {
+  cancelPreviewCandidateMove();
+  const newPly = currentPly + delta;
+  if (newPly >= 0 && newPly < moveHistory.length) {
+    updateToPly(newPly);
+  }
+}
+function goToStart() { cancelPreviewCandidateMove(); updateToPly(0); }
+function goToEnd() { cancelPreviewCandidateMove(); updateToPly(moveHistory.length - 1); }
+
+// ----------------------------------------------------
+// EXPORT & SAMPLE LOADERS
+// ----------------------------------------------------
+function loadSampleScotch() {
+  document.getElementById('pgn-input').value = SAMPLE_SCOTCH_PGN;
+  decompilePgn(SAMPLE_SCOTCH_PGN);
+}
+
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const text = event.target.result;
+    document.getElementById('pgn-input').value = text;
+    decompilePgn(text);
+  };
+  reader.readAsText(file);
+}
+
+function revertToOriginalPgn() {
+  if (!originalPgnRaw) return;
+  if (confirm("Revert all modifications and reload original imported PGN?")) {
+    decompilePgn(originalPgnRaw);
+  }
+}
+
+function exportCurrentLine() {
+  if (decompiledLines.length === 0) return;
+  const lineNodes = decompiledLines[activeLineIndex];
+  const movesStr = formatLineMoves(lineNodes, true); // includes {comments}
+  const opName = document.getElementById('opening-name-text').innerText;
+  const eco = document.getElementById('eco-code-text').innerText;
+
+  const pgnExport = `[Event "${opName}"]\n[ECO "${eco}"]\n[Site "RepertoireBuilder"]\n[Result "*"]\n\n${movesStr} *`;
+  
+  const blob = new Blob([pgnExport], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `repertoire_${eco}_line_${activeLineIndex + 1}.pgn`;
+  a.click();
+}
+</script>
+
+</body>
+</html>
