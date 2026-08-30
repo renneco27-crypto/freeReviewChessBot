@@ -646,9 +646,24 @@ body{display:flex;flex-direction:column;align-items:center;padding:12px 16px;gap
 .eval-bar-v{position:absolute;bottom:0;width:100%;background:#f0ede6;border-radius:0 0 4px 4px;transition:height .45s cubic-bezier(.4,0,.2,1);height:50%}
 
 /* Right column */
-.right-col{display:flex;flex-direction:column;gap:10px;min-width:0;max-height:calc(100vh - 100px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.right-col{display:flex;flex-direction:column;gap:12px;min-width:0;width:100%}
 
 /* ── Coach widget ── */
+.analysis-prog-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--surface3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+  border: 1px solid var(--border);
+}
+.analysis-prog-fill {
+  height: 100%;
+  background: var(--emerald);
+  transition: width 0.15s ease-out;
+}
+
 .coach-widget{display:flex;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;flex-shrink:0;box-shadow:var(--shadow-card)}
 .coach-avatar-wrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center}
 .coach-bot{position:relative;width:110px;height:110px;--mood:#3d8b5c;animation:coach-idle-bob 3.2s ease-in-out infinite}

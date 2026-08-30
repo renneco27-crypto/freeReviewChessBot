@@ -1258,8 +1258,8 @@ function setEngineStatus(s) {
 
 function initEngine() {
   setEngineStatus('connect');
-  POOL_SIZE = 1;
-  console.log('[Engine] Starting init, URL:', STOCKFISH_WORKER_URL);
+  POOL_SIZE = Math.min(typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4, 4);
+  console.log('[Engine] Starting init with ' + POOL_SIZE + ' workers, URL:', STOCKFISH_WORKER_URL);
 
   // Diagnose: can the Worker file be loaded at all?
   fetch(STOCKFISH_WORKER_URL).then(function(r) {
@@ -1362,14 +1362,15 @@ function createAnalysisPool(size) {
       var item = queue.shift();
       busy[free] = true;
       pendingCbs[free] = item.cb;
+      var movetime = item.movetime || 300;
       workers[free].postMessage('position fen ' + item.fen);
-      workers[free].postMessage('go depth ' + item.depth + ' movetime 1500');
+      workers[free].postMessage('go depth ' + item.depth + ' movetime ' + movetime);
     }
   }
 
   return {
-    evaluate: function(fen, depth, cb) {
-      queue.push({ fen: fen, depth: depth, cb: cb });
+    evaluate: function(fen, depth, cb, movetime) {
+      queue.push({ fen: fen, depth: depth, cb: cb, movetime: movetime });
       dispatch();
     },
     isReady: function() { return readyCount === size; },
@@ -2087,14 +2088,19 @@ function runGameReview() {
 
   for (var i = 0; i < allPositions.length; i++) {
     (function(idx) {
-      analysisPool.evaluate(allPositions[idx].fen, REVIEW_DEPTH, function(lines) {
+      analysisPool.evaluate(allPositions[idx].fen, Math.min(REVIEW_DEPTH || 10, 12), function(lines) {
         evals[idx] = parseLines(lines)[0] || null;
         completed++;
 
-        if (completed % 4 === 0 || completed === allPositions.length) {
-          var elapsed = Math.round((performance.now() - startTime) / 1000);
-          coachProgress('Analysed ' + completed + '/' + allPositions.length + ' positions (' + elapsed + 's)...');
-        }
+        var pct = Math.round((completed / allPositions.length) * 100);
+        var elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+        var currentMoveNum = Math.ceil(completed / 2);
+        var totalMoveNum = Math.ceil(moves.length / 2);
+        var label = 'Analyzing move ' + currentMoveNum + '/' + totalMoveNum + ' (' + pct + '% · ' + elapsed + 's)';
+        
+        var engLbl = document.getElementById('engineLabel');
+        if (engLbl) engLbl.textContent = label;
+        coachProgress('⏳ <strong>Analyzing game...</strong> Move ' + currentMoveNum + '/' + totalMoveNum + ' (' + pct + '% · ' + elapsed + 's)');
 
         if (completed === allPositions.length) {
           // Build results array from evals (halved: N+1 evals → N move results)
@@ -2121,11 +2127,6 @@ function runGameReview() {
                 var isWhite = (m.move.color === 'w');
                 var cpBefore = toCp(prevEval);
                 var cpAfter  = toCp(afterEval);
-                // White-relative eval (mirrors how finishReview/graphMoves computes whiteEval):
-                // idx even = White just moved; idx odd = Black just moved.
-                // Engine cp is side-to-move relative (positive = good for mover).
-                // Before the move: side-to-move is the mover, so wBefore = isWhite ? -cp : +cp
-                // After the move: side flipped, so wAfter  = isWhite ? +cp : -cp
                 var wBefore = isWhite ? -(cpBefore / 100) : (cpBefore / 100);
                 var wAfter  = isWhite ?  (cpAfter  / 100) : -(cpAfter  / 100);
                 return Math.abs(wAfter - wBefore);
@@ -2138,31 +2139,26 @@ function runGameReview() {
 
           finishReview(results, moves, rating);
         }
-      });
+      }, 250);
     })(i);
   }
 }
 
-async function finishReview(results, moves, rating) {
+function finishReview(results, moves, rating) {
   isAnalysing = false;
   setEngineStatus('ready');
 
-  // CRITICAL FIX: Restore game state from results so it persists for Maia mode
-  // After reviewing a PGN, the game board position must be loaded and moveHistory
-  // must be populated with all analyzed moves. Otherwise, when user clicks "Play vs Coach"
-  // after review, the position is lost and a fresh game starts.
   game = new Chess();
   moveHistory = [];
   graphMoves = [];
   
-  // Replay all moves and rebuild moveHistory with classification data
   for (var i = 0; i < results.length; i++) {
     var res = results[i];
     game.move(res.san);
     moveHistory.push({
       san: res.san,
       classification: res.classification,
-      evalBefore: res.evalBefore / 100,  // convert from centipawns to pawns
+      evalBefore: res.evalBefore / 100,
       evalAfter: res.evalAfter / 100,
       fenBefore: res.fenBefore,
       fenAfter: res.fenAfter,
@@ -2171,7 +2167,7 @@ async function finishReview(results, moves, rating) {
       pvAfter: res.afterLine ? res.afterLine.pv || null : null
     });
     graphMoves.push({
-      eval: res.evalAfter / 100,  // White-relative pawns
+      eval: res.evalAfter / 100,
       classification: res.classification,
       moveSan: res.san,
       ply: moveHistory.length,
@@ -2183,19 +2179,18 @@ async function finishReview(results, moves, rating) {
   updateNavDisplay();
 
   var r = parseInt(rating, 10);
-  var thresholdBase = r < 1400 ? 2.0 : r < 1800 ? 1.5 : 1.0; // lower rating = higher threshold
+  var thresholdBase = r < 1400 ? 2.0 : r < 1800 ? 1.5 : 1.0;
 
   var landmarks = [];
 
   for (var i = 0; i < results.length; i++) {
     var res = results[i];
-    var isBook = i < 5; // first few moves considered book
-    var evalSwingPawns = res.evalSwing; // already in pawns (White-relative)
+    var isBook = i < 5;
+    var evalSwingPawns = res.evalSwing;
 
     var landmarkCategory = null;
     var isLandmark = false;
 
-    // Determine if this is a landmark
     if (res.classification === 'blunder' || res.classification === 'brilliant') {
       isLandmark = true;
       landmarkCategory = res.classification === 'blunder' ? 'Blunder' : 'Brilliant';
@@ -2203,8 +2198,6 @@ async function finishReview(results, moves, rating) {
       isLandmark = true;
       landmarkCategory = 'Great';
     } else if ((res.classification === 'best' || res.classification === 'excellent') && evalSwingPawns >= 1.5 && Math.abs(res.evalAfter / 100) >= 3.0) {
-      // Only flag a Best/Excellent as a landmark if it's in a decisive position (±3+)
-      // AND it caused a significant swing (≥1.5 pawns) — not just consolidating an already-won position
       isLandmark = true;
       landmarkCategory = 'Best';
     } else if (res.classification === 'mistake') {
@@ -2214,7 +2207,6 @@ async function finishReview(results, moves, rating) {
       isLandmark = true;
       landmarkCategory = 'Inaccuracy';
     } else if (i > 0 && res.classification !== 'best' && res.classification !== 'excellent' && res.classification !== 'brilliant' && res.classification !== 'great') {
-      // Check for "Miss": opponent made a suboptimal move, player failed to capitalize
       var prevRes = results[i - 1];
       var prevWasSuboptimal = (prevRes.classification === 'blunder' || prevRes.classification === 'mistake' || prevRes.classification === 'inaccuracy');
       var playerFailed = res.classification !== 'best' && res.classification !== 'excellent' && res.classification !== 'brilliant' && res.classification !== 'great';
@@ -2233,7 +2225,7 @@ async function finishReview(results, moves, rating) {
         bestMoveHuman = moveResult ? moveResult.san : bestMoveSan;
       }
 
-      var commentary = await generateReviewCommentary(landmarkCategory, res, bestMoveHuman, isBook);
+      var commentary = staticFallback(landmarkCategory, res, bestMoveHuman);
 
       landmarks.push({
         moveNumber: res.moveNumber,
