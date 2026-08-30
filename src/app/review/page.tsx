@@ -1,19 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Board } from '../../components/ChessReview/Board';
-import { EvalBar } from '../../components/ChessReview/EvalBar';
-import { EvalGraph } from '../../components/ChessReview/EvalGraph';
-import { MoveList } from '../../components/ChessReview/MoveList';
-import { CoachReviewCard } from '../../components/ChessReview/CoachReviewCard';
-import { AdvancedStatsModal } from '../../components/ChessReview/AdvancedStatsModal';
-import { GameListModal } from '../../components/ChessReview/GameListModal';
+import { CoachBot } from '../../components/ChessReview/CoachBot';
 import { runStockfishGameReview } from '../../lib/stockfishReview';
 import { analyzePGN } from '../../lib/engineAnalyzer';
-import { generateGameSummary } from '../../lib/coachReviewer';
 import { sounds } from '../../lib/soundService';
-import type { GameReviewReport, ChessComGameSummary } from '../../types/review';
+import type { GameReviewReport, MoveAnalysis, MoveClassification, ChessComGameSummary } from '../../types/review';
+import './coach.css';
 
 const SAMPLE_KASPAROV_PGN = `[Event "Wijk aan Zee"]
 [Site "Wijk aan Zee NED"]
@@ -28,117 +23,111 @@ const SAMPLE_KASPAROV_PGN = `[Event "Wijk aan Zee"]
 
 1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. Be3 Bg7 5. Qd2 c6 6. f3 b5 7. Nge2 Nbd7 8. Bh6 Bxh6 9. Qxh6 Bb7 10. a3 e5 11. O-O-O Qe7 12. Kb1 a6 13. Nc1 O-O-O 14. Nb3 exd4 15. Rxd4 c5 16. Rd1 Nb6 17. g3 Kb8 18. Na5 Ba8 19. Bh3 d5 20. Qf4+ Ka7 21. Rhe1 d4 22. Nd5 Nbxd5 23. exd5 Qd6 24. Rxd4 cxd4 25. Re7+ Kb6 26. Qxd4+ Kxa5 27. b4+ Ka4 28. Qc3 Qxd5 29. Ra7 Bb7 30. Rxb7 Qc4 31. Qxf6 Kxa3 32. Qxa6+ Kxb4 33. c3+ Kxc3 34. Qa1+ Kd2 35. Qb2+ Kd1 36. Bf1 Rd2 37. Rd7 Rxd7 38. Bxc4 bxc4 39. Qxh8 Rd3 40. Qa8 c3 41. Qa4+ Ke1 42. f4 f5 43. Kc1 Rd2 44. Qa7 1-0`;
 
-const SAMPLE_OPERA_PGN = `[Event "Paris Opera"]
-[Site "Paris FRA"]
-[Date "1858.11.02"]
-[White "Paul Morphy"]
-[Black "Duke Karl / Count Isouard"]
-[Result "1-0"]
-[ECO "C41"]
-
-1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0`;
-
 export default function GameReviewPage() {
   const [report, setReport] = useState<GameReviewReport | null>(null);
   const [currentPly, setCurrentPly] = useState(0);
-  const [showStats, setShowStats] = useState(false);
-  const [showGameList, setShowGameList] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState('');
-  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [engineStatus, setEngineStatus] = useState<'ready' | 'thinking' | 'error'>('ready');
+  const [engineLabel, setEngineLabel] = useState('Stockfish NNUE Engine Ready');
   const [pgnInput, setPgnInput] = useState('');
-  const [username, setUsername] = useState('');
-  const [games, setGames] = useState<ChessComGameSummary[]>([]);
-  const [gamesLoading, setGamesLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState<'import' | 'chesscom'>('import');
-  const [gameSummary, setGameSummary] = useState('');
+  const [fenInput, setFenInput] = useState('');
+  const [chessUserInput, setChessUserInput] = useState('');
+  const [syncStatus, setSyncStatus] = useState('');
+  const [syncGames, setSyncGames] = useState<ChessComGameSummary[]>([]);
+  const [depth, setDepth] = useState(10);
+  const [rating, setRating] = useState('1400');
+  const [apiToken, setApiToken] = useState('');
+  const [flipped, setFlipped] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [showWhyMistake, setShowWhyMistake] = useState(false);
 
-  const currentMove = report?.moves.find(m => m.ply === currentPly) ?? null;
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const currentMove: MoveAnalysis | null = report?.moves.find(m => m.ply === currentPly) ?? null;
   const currentFen = currentPly === 0
     ? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     : (report?.moves.find(m => m.ply === currentPly)?.fenAfter ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
-  const currentEval = currentMove?.evalAfter ?? 0;
 
-  const doAnalyze = useCallback(async (pgn: string) => {
+  const currentEval = currentMove?.evalAfter ?? 0;
+  const evalWhitePawns = currentEval / 100;
+  const evalDisplay = evalWhitePawns >= 0 ? `+${evalWhitePawns.toFixed(2)}` : evalWhitePawns.toFixed(2);
+
+  // Vertical eval bar height calculation
+  const clampedCp = Math.max(-1000, Math.min(1000, currentEval));
+  const evalBarHeight = `${Math.max(5, Math.min(95, 50 + (clampedCp / 1000) * 45))}%`;
+
+  // Start analysis
+  const doReview = useCallback(async (pgn: string) => {
+    if (!pgn.trim()) return;
     setIsAnalyzing(true);
-    setError('');
+    setEngineStatus('thinking');
+    setEngineLabel('Analyzing game with Stockfish NNUE...');
     setCurrentPly(0);
-    setAnalysisProgress(0);
-    setAnalysisStatus('Starting Stockfish engine analysis...');
 
     try {
-      // First try real Stockfish worker
       let result: GameReviewReport;
       try {
-        result = await runStockfishGameReview(pgn, (current, total, msg) => {
-          setAnalysisStatus(msg);
-          setAnalysisProgress(Math.round((current / total) * 100));
-        });
-      } catch (workerErr) {
-        console.warn('Stockfish worker failed, using fallback engine:', workerErr);
-        setAnalysisStatus('Evaluating moves...');
+        result = await runStockfishGameReview(pgn, (curr, tot, msg) => {
+          setEngineLabel(msg);
+        }, depth);
+      } catch (e) {
+        console.warn('Worker review fallback:', e);
         result = analyzePGN(pgn);
       }
 
       setReport(result);
-      setGameSummary(generateGameSummary(result));
-    } catch (e) {
-      setError(`Analysis failed: ${e instanceof Error ? e.message : 'Invalid PGN format'}`);
+      setEngineStatus('ready');
+      setEngineLabel('Review complete · Ready');
+    } catch (err) {
+      setEngineStatus('error');
+      setEngineLabel(`Analysis failed: ${err instanceof Error ? err.message : 'Invalid PGN'}`);
     } finally {
       setIsAnalyzing(false);
-      setAnalysisStatus('');
     }
-  }, []);
+  }, [depth]);
 
-  const handleImportPGN = () => {
+  const handleReviewClick = () => {
     const pgn = pgnInput.trim() || SAMPLE_KASPAROV_PGN;
-    doAnalyze(pgn);
+    doReview(pgn);
   };
 
-  const handleFetchChessCom = async () => {
-    if (!username.trim()) return;
-    setGamesLoading(true);
-    setError('');
+  const handleClearClick = () => {
+    setPgnInput('');
+    setReport(null);
+    setCurrentPly(0);
+    setEngineLabel('Stockfish NNUE Engine Ready');
+  };
+
+  const handleSyncChessCom = async () => {
+    if (!chessUserInput.trim()) return;
+    setSyncStatus('Fetching recent games from Chess.com...');
     try {
-      const archivesRes = await fetch(`https://api.chess.com/pub/player/${username.toLowerCase().trim()}/games/archives`);
-      if (!archivesRes.ok) throw new Error(`Player "${username}" not found on Chess.com`);
-      const archivesData = await archivesRes.json();
-      const archives = archivesData.archives || [];
-      if (archives.length === 0) throw new Error('No game archives found for this player');
+      const res = await fetch(`https://api.chess.com/pub/player/${chessUserInput.toLowerCase().trim()}/games/archives`);
+      if (!res.ok) throw new Error('Player not found');
+      const data = await res.json();
+      const archives = data.archives || [];
+      if (!archives.length) throw new Error('No archives found');
 
-      const latestArchiveUrl = archives[archives.length - 1];
-      const gamesRes = await fetch(latestArchiveUrl);
-      if (!gamesRes.ok) throw new Error('Could not retrieve monthly archive');
-      const gamesData = await gamesRes.json();
-      const fetchedGames: ChessComGameSummary[] = (gamesData.games || []).filter((g: any) => g.rules === 'chess').reverse();
+      const latest = archives[archives.length - 1];
+      const gRes = await fetch(latest);
+      const gData = await gRes.json();
+      const games: ChessComGameSummary[] = (gData.games || []).filter((g: any) => g.rules === 'chess').reverse();
 
-      setGames(fetchedGames);
-      setShowGameList(true);
+      setSyncGames(games);
+      setSyncStatus(`Found ${games.length} games`);
     } catch (e) {
-      setError(`Failed to fetch: ${e instanceof Error ? e.message : 'Unknown error'}`);
-    } finally {
-      setGamesLoading(false);
+      setSyncStatus(`Sync error: ${e instanceof Error ? e.message : 'Unknown'}`);
     }
   };
 
-  const handleSelectGame = (pgn: string) => {
-    setShowGameList(false);
-    setPgnInput(pgn);
-    doAnalyze(pgn);
-  };
-
-  const navigateMove = useCallback((direction: 'prev' | 'next' | 'first' | 'last') => {
+  const navigateMove = useCallback((direction: 'prev' | 'next') => {
     if (!report) return;
     const maxPly = report.moves.length;
     setCurrentPly(prev => {
       let next = prev;
-      switch (direction) {
-        case 'prev': next = Math.max(0, prev - 1); break;
-        case 'next': next = Math.min(maxPly, prev + 1); break;
-        case 'first': next = 0; break;
-        case 'last': next = maxPly; break;
-      }
+      if (direction === 'prev') next = Math.max(0, prev - 1);
+      if (direction === 'next') next = Math.min(maxPly, prev + 1);
+
       if (next !== prev && next > 0) {
         const move = report.moves[next - 1];
         if (move?.san.includes('x')) sounds.playCapture();
@@ -146,297 +135,319 @@ export default function GameReviewPage() {
         else if (move?.classification === 'brilliant') sounds.playBrilliant();
         else if (move?.classification === 'blunder') sounds.playBlunder();
         else sounds.playMove();
+
+        setShowWhyMistake(move?.classification === 'blunder' || move?.classification === 'mistake');
       }
       return next;
     });
   }, [report]);
 
-  // Global keyboard shortcuts
+  // Keyboard navigation
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
       if (e.key === 'ArrowLeft') navigateMove('prev');
-      else if (e.key === 'ArrowRight') navigateMove('next');
-      else if (e.key === 'Home') navigateMove('first');
-      else if (e.key === 'End') navigateMove('last');
+      if (e.key === 'ArrowRight') navigateMove('next');
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [navigateMove]);
 
-  return (
-    <div className="min-h-screen bg-[#111317] text-gray-100 flex flex-col">
-      {/* Top Navbar */}
-      <header className="border-b border-gray-800 bg-[#16181f] sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-400 hover:text-white transition-colors text-sm font-semibold flex items-center gap-1">
-              <span>← Repertoire</span>
-            </Link>
-            <div className="h-4 w-px bg-gray-700 mx-1" />
-            <span className="text-2xl">🎓</span>
-            <h1 className="text-lg font-bold text-white tracking-tight">Chess Coach Game Review</h1>
-            <span className="text-[11px] text-green-400 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-full font-mono">
-              Stockfish NNUE Engine
-            </span>
-          </div>
+  // Draw Evaluation Canvas Graph
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !report) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-          <div className="flex items-center gap-3">
-            {report && (
-              <button
-                onClick={() => setShowStats(true)}
-                className="px-3.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
-              >
-                <span>📊</span>
-                <span>Advanced Review Stats</span>
-              </button>
-            )}
-            <Link
-              href="/builder"
-              className="text-xs text-gray-400 hover:text-white transition-colors"
-            >
-              Repertoire Builder →
-            </Link>
-          </div>
+    const w = (canvas.width = canvas.parentElement?.clientWidth || 300);
+    const h = (canvas.height = 64);
+
+    ctx.clearRect(0, 0, w, h);
+
+    const evals = [0, ...report.moves.map(m => Math.max(-600, Math.min(600, m.evalAfter)) / 100)];
+    const pts = evals.map((val, i) => {
+      const x = (i / Math.max(evals.length - 1, 1)) * w;
+      const y = h / 2 - (val / 6) * (h / 2 - 4);
+      return { x, y };
+    });
+
+    // Zero baseline
+    ctx.strokeStyle = '#3a332a';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Curve
+    ctx.strokeStyle = '#3d8b5c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    // Active Move indicator
+    if (currentPly >= 0 && currentPly < pts.length) {
+      const cur = pts[currentPly];
+      ctx.strokeStyle = '#c8a84b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cur.x, 0);
+      ctx.lineTo(cur.x, h);
+      ctx.stroke();
+
+      ctx.fillStyle = '#c8a84b';
+      ctx.beginPath();
+      ctx.arc(cur.x, cur.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [report, currentPly]);
+
+  // Coach message calculation
+  let coachMood: MoveClassification | 'ready' | 'thinking' = 'ready';
+  let coachMessage = 'Ready when you are. Make a move or paste a PGN to review a game.';
+
+  if (isAnalyzing) {
+    coachMood = 'thinking';
+    coachMessage = engineLabel;
+  } else if (currentMove) {
+    coachMood = currentMove.classification;
+    if (coachMood === 'brilliant') {
+      coachMessage = `Brilliant move! This finds a remarkable tactical resource that completely shifts the evaluation.`;
+    } else if (coachMood === 'best') {
+      coachMessage = `Best move. Perfectly calculated continuation matching top engine recommendations.`;
+    } else if (coachMood === 'great') {
+      coachMessage = `Great move! Keeps the position firmly under control.`;
+    } else if (coachMood === 'excellent' || coachMood === 'good') {
+      coachMessage = `Solid play. Natural development that maintains your positional advantage.`;
+    } else if (coachMood === 'book') {
+      coachMessage = `Opening book move following mainline theoretical principles.`;
+    } else if (coachMood === 'inaccuracy') {
+      coachMessage = `A slight inaccuracy. Not a blunder, but gives your opponent some counterplay.`;
+    } else if (coachMood === 'mistake') {
+      coachMessage = `Mistake. This allows a tactical response that significantly weakens your position.`;
+    } else if (coachMood === 'blunder') {
+      coachMessage = `Blunder! This drastically throws away the evaluation and gives up a major advantage.`;
+    }
+  }
+
+  return (
+    <div className="coach-page">
+      {/* Header */}
+      <header className="coach-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: '12px', fontWeight: 600 }}>
+            ← Home
+          </Link>
+          <h1>
+            Chess Coach <span>Coach · Stockfish · NNUE</span>
+          </h1>
+        </div>
+
+        <div className="rating-select-wrap">
+          <label htmlFor="ratingSelect">Rating</label>
+          <select id="ratingSelect" value={rating} onChange={(e) => setRating(e.target.value)}>
+            <option value="1000">&lt;1200</option>
+            <option value="1200">1200–1399</option>
+            <option value="1400">1400–1599</option>
+            <option value="1600">1600–1799</option>
+            <option value="1800">1800–1999</option>
+            <option value="2000">2000–2199</option>
+            <option value="2200">2200–2499</option>
+            <option value="2500">2500+</option>
+          </select>
+        </div>
+
+        <div className="token-wrap">
+          <input
+            type="text"
+            id="apiToken"
+            value={apiToken}
+            onChange={(e) => setApiToken(e.target.value)}
+            placeholder="Lichess API token (optional)"
+            spellCheck="false"
+          />
+          <button className="btn small" onClick={() => alert('Token saved')}>Save</button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
-        {/* Game Setup / Import View */}
-        {!report && (
-          <div className="max-w-2xl mx-auto space-y-6 pt-4">
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-extrabold text-white">Full Game Review & AI Coach</h2>
-              <p className="text-gray-400 text-sm">
-                Analyze move quality with Stockfish evaluations, accurate win-probability classifications, and coach explanations.
-              </p>
-            </div>
-
-            {/* Input Switch Tabs */}
-            <div className="flex gap-1.5 bg-[#181a20] p-1 rounded-xl border border-gray-800">
-              <button
-                onClick={() => setTab('import')}
-                className={`flex-1 py-2 px-4 rounded-lg text-xs font-bold transition-all ${
-                  tab === 'import' ? 'bg-[#252a34] text-white shadow-md' : 'text-gray-400 hover:text-gray-200'
-                }`}
-              >
-                📋 Paste PGN
-              </button>
-              <button
-                onClick={() => setTab('chesscom')}
-                className={`flex-1 py-2 px-4 rounded-lg text-xs font-bold transition-all ${
-                  tab === 'chesscom' ? 'bg-[#252a34] text-white shadow-md' : 'text-gray-400 hover:text-gray-200'
-                }`}
-              >
-                ♟ Import from Chess.com
-              </button>
-            </div>
-
-            {tab === 'import' && (
-              <div className="space-y-3">
-                <textarea
-                  value={pgnInput}
-                  onChange={(e) => setPgnInput(e.target.value)}
-                  placeholder="Paste any PGN text here (with or without [%clk] time annotations)..."
-                  className="w-full h-44 bg-[#181a20] border border-gray-800 rounded-xl p-4 text-xs font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/60 resize-none shadow-inner"
-                />
-                <button
-                  onClick={handleImportPGN}
-                  disabled={isAnalyzing}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm shadow-md flex items-center justify-center gap-2"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>{analysisStatus || 'Analyzing with Stockfish...'}</span>
-                    </>
-                  ) : (
-                    '🔍 Start Game Review'
-                  )}
-                </button>
-                {isAnalyzing && analysisProgress > 0 && (
-                  <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full transition-all duration-300"
-                      style={{ width: `${analysisProgress}%` }}
-                    />
-                  </div>
-                )}
+      <div className="main-wrap">
+        {/* Board column */}
+        <div className="board-col">
+          <div className="board-area">
+            {/* Vertical Eval Bar */}
+            <div className="eval-vert">
+              <span className="eval-val" id="evalDisplay">{evalDisplay}</span>
+              <div className="eval-bar-wrap-v">
+                <div className="eval-bar-v" id="evalBar" style={{ height: evalBarHeight }} />
               </div>
-            )}
+            </div>
 
-            {tab === 'chesscom' && (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleFetchChessCom()}
-                    placeholder="Enter username (e.g. magnuscarlsen, hikaru)..."
-                    className="flex-1 bg-[#181a20] border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/60 shadow-inner"
-                  />
+            {/* Chessboard Area */}
+            <div className="board-wrap">
+              <Board fen={currentFen} currentMove={currentMove} flipped={flipped} />
+            </div>
+          </div>
+
+          {/* FEN row */}
+          <div className="fen-row">
+            <input
+              className="fen-input"
+              value={fenInput}
+              onChange={(e) => setFenInput(e.target.value)}
+              placeholder="Paste FEN to load a position…"
+              spellCheck="false"
+            />
+            <button className="btn primary" onClick={() => {}}>Position</button>
+          </div>
+
+          {/* PGN row */}
+          <div className="pgn-row">
+            <textarea
+              value={pgnInput}
+              onChange={(e) => setPgnInput(e.target.value)}
+              placeholder="Paste PGN here to review a complete game…"
+              spellCheck="false"
+              rows={3}
+            />
+            <div className="pgn-actions">
+              <button className="btn accent" onClick={handleReviewClick} disabled={isAnalyzing}>
+                {isAnalyzing ? '⏳ Analyzing...' : '▶ Review Game'}
+              </button>
+              <button className="btn danger" onClick={handleClearClick}>Clear</button>
+              <button className="btn" onClick={() => doReview(SAMPLE_KASPAROV_PGN)} style={{ fontSize: '11px' }}>
+                Sample Game
+              </button>
+            </div>
+          </div>
+
+          {/* Move Controls */}
+          <div className="move-controls">
+            <div className="depth-row">
+              <span>Depth</span>
+              <input
+                type="range"
+                min="6"
+                max="18"
+                value={depth}
+                onChange={(e) => setDepth(parseInt(e.target.value))}
+              />
+              <span>{depth}</span>
+            </div>
+
+            <button className="btn" onClick={() => setFlipped(!flipped)} title="Flip board">
+              ↺ Flip
+            </button>
+            <button className="btn" onClick={() => navigateMove('prev')}>
+              ← Prev
+            </button>
+            <button className="btn" onClick={() => navigateMove('next')}>
+              Next →
+            </button>
+            <button
+              className={`btn ${ttsEnabled ? 'tts-on' : ''}`}
+              onClick={() => setTtsEnabled(!ttsEnabled)}
+              title="Toggle coach voice"
+            >
+              {ttsEnabled ? '🔊 Voice: ON' : '🔇 Voice: OFF'}
+            </button>
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="right-col">
+          {/* Engine Status */}
+          <div className="engine-status-big">
+            <div className={`engine-dot ${engineStatus}`} />
+            <span>{engineLabel}</span>
+          </div>
+
+          {/* Animated Coach Bot Widget */}
+          <CoachBot
+            mood={coachMood}
+            message={coachMessage}
+            san={currentMove?.san}
+            ttsEnabled={ttsEnabled}
+            showWhyMistake={showWhyMistake}
+            onWhyMistake={() => alert(`Refutation line: ${currentMove?.bestMoveUci || 'Engine suggests defending or retreating the attacked piece.'}`)}
+          />
+
+          {/* Eval Graph Panel */}
+          <div className="graph-panel">
+            <div className="panel-title">Evaluation Graph</div>
+            <canvas ref={canvasRef} id="evalCanvas" />
+          </div>
+
+          {/* Chess.com Sync Panel */}
+          <div className="chess-sync-panel">
+            <div className="panel-title">Chess.com Sync</div>
+            <div className="sync-row">
+              <input
+                className="sync-input"
+                value={chessUserInput}
+                onChange={(e) => setChessUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSyncChessCom()}
+                placeholder="Username (e.g. magnuscarlsen)"
+                spellCheck="false"
+              />
+              <button className="btn" onClick={handleSyncChessCom}>↺ Sync</button>
+            </div>
+            {syncStatus && <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>{syncStatus}</div>}
+            {syncGames.length > 0 && (
+              <div style={{ marginTop: '8px', maxHeight: '120px', overflowY: 'auto' }}>
+                {syncGames.slice(0, 5).map((g, i) => (
                   <button
-                    onClick={handleFetchChessCom}
-                    disabled={gamesLoading || !username.trim()}
-                    className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm whitespace-nowrap shadow-md"
+                    key={i}
+                    onClick={() => { setPgnInput(g.pgn); doReview(g.pgn); }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', color: 'var(--gold)', cursor: 'pointer', padding: '3px 0', fontSize: '11px' }}
                   >
-                    {gamesLoading ? '⏳' : '🔍'} Fetch Games
+                    ▶ vs {g.white.username.toLowerCase() === chessUserInput.toLowerCase() ? g.black.username : g.white.username} ({g.time_class})
                   </button>
-                </div>
-                <p className="text-[11px] text-gray-500 text-center">
-                  Direct REST querying of public game archives — no login required.
-                </p>
+                ))}
               </div>
             )}
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-xs font-medium">
-                ❌ {error}
-              </div>
-            )}
-
-            {/* Quick Sample Games */}
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <span className="text-xs text-gray-500">Quick Samples:</span>
-              <button
-                onClick={() => doAnalyze(SAMPLE_KASPAROV_PGN)}
-                disabled={isAnalyzing}
-                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors disabled:opacity-50"
-              >
-                Kasparov's Immortal (1999)
-              </button>
-              <button
-                onClick={() => doAnalyze(SAMPLE_OPERA_PGN)}
-                disabled={isAnalyzing}
-                className="text-xs bg-gray-800/60 hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700/60 transition-colors disabled:opacity-50"
-              >
-                Morphy Opera Game (1858)
-              </button>
-            </div>
           </div>
-        )}
 
-        {/* Active Game Review Dashboard */}
-        {report && (
-          <div className="space-y-4">
-            {/* Top Match Information Header */}
-            <div className="flex flex-wrap items-center justify-between bg-[#181a20] rounded-xl border border-gray-800 px-4 py-3 gap-3 shadow-sm">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => { setReport(null); setCurrentPly(0); setGameSummary(''); }}
-                  className="text-gray-400 hover:text-white transition-colors text-xs font-bold bg-gray-800/80 px-2.5 py-1.5 rounded-lg border border-gray-700"
-                >
-                  ← New Game
-                </button>
-                <div className="h-4 w-px bg-gray-700 hidden sm:block" />
-                <div className="text-sm flex items-center gap-2">
-                  <span className="text-white font-bold">{report.whitePlayer}</span>
-                  {report.whiteRating && <span className="text-gray-400 text-xs font-mono">({report.whiteRating})</span>}
-                  <span className="text-gray-500 font-bold text-xs">vs</span>
-                  <span className="text-white font-bold">{report.blackPlayer}</span>
-                  {report.blackRating && <span className="text-gray-400 text-xs font-mono">({report.blackRating})</span>}
-                </div>
-                <div className="h-4 w-px bg-gray-700 hidden md:block" />
-                <span className="text-xs text-gray-400 hidden md:inline">{report.openingName} ({report.eco})</span>
-              </div>
-
-              {/* Accuracy Bars */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-gray-200 font-bold">{report.whiteAccuracy}%</span>
-                  <div className="w-16 h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-gray-200" style={{ width: `${report.whiteAccuracy}%` }} />
-                  </div>
-                </div>
-                <span className="text-gray-500 text-xs font-bold">vs</span>
-                <div className="flex items-center gap-1.5 text-xs">
-                  <div className="w-16 h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${report.blackAccuracy}%` }} />
-                  </div>
-                  <span className="text-blue-400 font-bold">{report.blackAccuracy}%</span>
-                </div>
-                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
-                  {report.result}
+          {/* Move History Panel */}
+          <div className="history-panel">
+            <div className="history-header">
+              <span className="panel-title" style={{ margin: 0 }}>Move History</span>
+              {report && (
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                  W: {report.whiteAccuracy}% · B: {report.blackAccuracy}%
                 </span>
-              </div>
+              )}
             </div>
 
-            {/* 3-Column Review Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_310px] gap-4 items-start">
-              {/* Left Column: Vertical Eval Bar + Board */}
-              <div className="flex gap-2 justify-center lg:justify-start">
-                <div className="h-[480px] sm:h-[540px]">
-                  <EvalBar eval_={currentEval} />
-                </div>
-                <div className="w-[480px] sm:w-[540px]">
-                  <Board fen={currentFen} currentMove={currentMove} />
-                </div>
-              </div>
-
-              {/* Center Column: Eval Advantage Graph + Navigation + Move List */}
-              <div className="space-y-3 min-w-0">
-                <EvalGraph
-                  moves={report.moves}
-                  currentPly={currentPly}
-                  onMoveClick={(ply) => setCurrentPly(ply)}
-                />
-
-                {/* Move Navigation Buttons */}
-                <div className="flex items-center justify-center gap-1.5 bg-[#181a20] p-2 rounded-xl border border-gray-800">
-                  <button onClick={() => navigateMove('first')} className="px-3 py-1.5 bg-[#20232b] hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-300 transition-colors">⏮</button>
-                  <button onClick={() => navigateMove('prev')} className="px-4 py-1.5 bg-[#20232b] hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-300 transition-colors">◀ Prev</button>
-                  <span className="text-xs text-gray-300 px-3 font-mono font-bold min-w-[120px] text-center">
-                    {currentPly > 0 ? `Move ${Math.ceil(currentPly / 2)}${currentPly % 2 === 1 ? '.' : '...'} ${currentMove?.san || ''}` : 'Start Position'}
-                  </span>
-                  <button onClick={() => navigateMove('next')} className="px-4 py-1.5 bg-[#20232b] hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-300 transition-colors">Next ▶</button>
-                  <button onClick={() => navigateMove('last')} className="px-3 py-1.5 bg-[#20232b] hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-300 transition-colors">⏭</button>
-                </div>
-
-                <MoveList
-                  moves={report.moves}
-                  currentPly={currentPly}
-                  onMoveSelect={(ply) => setCurrentPly(ply)}
-                />
-              </div>
-
-              {/* Right Column: Coach Commentary Card + Summary */}
-              <div className="space-y-3">
-                <CoachReviewCard move={currentMove} report={report} />
-
-                {gameSummary && (
-                  <div className="bg-[#181a20] rounded-xl border border-gray-800 p-3.5 shadow-sm space-y-2">
-                    <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">📋 Match Assessment</h3>
-                    <pre className="text-[11px] text-gray-400 whitespace-pre-wrap font-sans leading-relaxed">
-                      {gameSummary}
-                    </pre>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setShowStats(true)}
-                  className="w-full py-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition-colors shadow-sm"
+            <div className="move-list">
+              {report?.moves.map((m) => (
+                <div
+                  key={m.ply}
+                  className={`move-chip ${m.ply === currentPly ? 'active' : ''}`}
+                  onClick={() => setCurrentPly(m.ply)}
                 >
-                  📊 Full Phase & Accuracy Breakdown
-                </button>
-              </div>
+                  <span>{m.moveNumber}{m.color === 'w' ? '.' : '...'}</span>
+                  <span>{m.san}</span>
+                  <span style={{ fontSize: '10px', color: m.classification === 'blunder' ? 'var(--danger-hi)' : 'var(--gold)' }}>
+                    {m.classification === 'brilliant' ? '!!' : m.classification === 'blunder' ? '??' : m.classification === 'best' ? '★' : ''}
+                  </span>
+                </div>
+              ))}
+              {!report && (
+                <div style={{ fontSize: '12px', color: 'var(--text-mute)', padding: '8px 0' }}>
+                  No moves loaded yet. Paste a PGN or select a sample game.
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </main>
-
-      {/* Modals */}
-      {showStats && report && (
-        <AdvancedStatsModal report={report} onClose={() => setShowStats(false)} />
-      )}
-      {showGameList && (
-        <GameListModal
-          games={games}
-          username={username}
-          onSelectGame={handleSelectGame}
-          onClose={() => setShowGameList(false)}
-          loading={gamesLoading}
-        />
-      )}
+        </div>
+      </div>
     </div>
   );
 }
